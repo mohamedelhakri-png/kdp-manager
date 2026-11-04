@@ -1,0 +1,41 @@
+
+CREATE TABLE IF NOT EXISTS admin_users (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(100) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS books (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  subtitle VARCHAR(255),
+  author VARCHAR(255),
+  asin VARCHAR(20),
+  isbn VARCHAR(20),
+  category VARCHAR(150),
+  format VARCHAR(50),
+  status ENUM('draft','published','archived')
+    NOT NULL DEFAULT 'draft',
+  publication_date DATE,
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sales_records (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  book_id BIGINT UNSIGNED NOT NULL,
+  sale_date DATE NOT NULL,
+  units INT UNSIGNED NOT NULL DEFAULT 0,
+  royalties DECIMAL(12,2) NOT NULL DEFAULT 0,
+  currency CHAR(3) NOT NULL DEFAULT 'USD',
+  source VARCHAR(50) NOT NULL DEFAULT 'manual',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (book_id) REFERENCES books(id)
+    ON DELETE CASCADE
+);
+
+CREATE INDEX idx_books_status ON books(status);
+CREATE INDEX idx_sales_date ON sales_records(sale_date);
