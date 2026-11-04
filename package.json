@@ -1,12 +1,17 @@
+
 {
   "name": "kdp-manager",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "private": true,
-  "description": "KDP Manager prototype",
+  "description": "Personal Amazon KDP management dashboard",
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "db:migrate": "node scripts/migrate.js"
+  },
+  "dependencies": {
+    "mysql2": "^3.15.3"
   },
   "engines": {
     "node": ">=20"
