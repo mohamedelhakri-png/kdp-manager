@@ -1,0 +1,11 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { validateSale } from "../database/sales-validation.js";
+const good = { book_id: "1", sale_date: "2026-11-05", units: 3, royalties: "12.50", currency: "USD" };
+test("accepts valid manual sale", () => assert.deepEqual(validateSale(good).sale, { ...good, source: "manual" }));
+test("rejects nonexistent or malformed identifiers", () => assert.ok(validateSale({ ...good, book_id: "0" }).error));
+test("rejects impossible calendar dates", () => assert.ok(validateSale({ ...good, sale_date: "2026-02-30" }).error));
+test("rejects fractional units", () => assert.ok(validateSale({ ...good, units: 1.5 }).error));
+test("rejects negative royalties", () => assert.ok(validateSale({ ...good, royalties: "-1" }).error));
+test("rejects unsupported currency syntax", () => assert.ok(validateSale({ ...good, currency: "usd" }).error));
+test("rejects missing body", () => assert.ok(validateSale(null).error));
