@@ -297,6 +297,7 @@ export const server = http.createServer(async (req, res) => {
   }
 
   if (path === "/books") {
+    if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
     try { json(res, 200, { books: await booksRepository.list(), demo: false }); }
     catch (error) { console.error(JSON.stringify({ event: "books_read_failed", code: error.code || "DB_ERROR" })); json(res, 503, { error: "Books temporarily unavailable" }); }
     return;
