@@ -47,3 +47,9 @@ test("Unauthenticated writes are rejected", async () => {
   const result = await request("/books", "POST");
   assert.equal(result.status, 401);
 });
+
+test("Summary endpoint requires authentication", async () => {
+  const result = await request("/api/summary");
+  assert.equal(result.status, 401);
+  assert.equal(result.body.error, "Authentication required");
+});
