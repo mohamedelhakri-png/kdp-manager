@@ -267,7 +267,7 @@ export const server = http.createServer(async (req, res) => {
   }
   if (path === "/api/analytics") {
     if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
-    try { const query = new URL(req.url, "http://localhost").searchParams; const month = query.get("month") || ""; const bookId = query.get("book_id") || ""; if ((month && !/^\\d{4}-(0[1-9]|1[0-2])$/.test(month)) || (bookId && !/^[1-9]\\d{0,18}$/.test(bookId))) { json(res, 400, { error: "Invalid analytics filters" }); return; } json(res, 200, await salesAnalytics.filtered({ month, bookId })); }
+    try { const query = new URL(req.url, "http://localhost").searchParams; const month = query.get("month") || ""; const bookId = query.get("book_id") || ""; if ((month && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) || (bookId && !/^[1-9]\d{0,18}$/.test(bookId))) { json(res, 400, { error: "Invalid analytics filters" }); return; } json(res, 200, await salesAnalytics.filtered({ month, bookId })); }
     catch (error) { console.error(JSON.stringify({ event: "sales_analytics_failed", code: error.code || "DB_ERROR" })); json(res, 503, { error: "Analytics temporarily unavailable" }); }
     return;
   }
