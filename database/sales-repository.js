@@ -12,6 +12,36 @@ export function createSalesRepository(poolFactory = createDatabasePool) {
       if (!books.length) return null;
       const [result] = await db().execute("INSERT INTO sales_records (book_id, sale_date, units, royalties, currency, source) VALUES (?, ?, ?, ?, ?, ?)", [sale.book_id, sale.sale_date, sale.units, sale.royalties, sale.currency, sale.source]);
       return { id: String(result.insertId) };
+    },
+    async importCsv(sales) {
+      if (!Array.isArray(sales) || sales.length < 1 || sales.length > 500) throw new Error("Invalid batch size");
+      const connection = await db().getConnection();
+      let locked = false;
+      try {
+        const [[lock]] = await connection.query("SELECT GET_LOCK('kdp_sales_csv_import', 10) AS acquired");
+        if (lock.acquired !== 1) throw new Error("Import busy");
+        locked = true;
+        await connection.beginTransaction();
+        const [existing] = await connection.query("SELECT book_id, sale_date, units, royalties, currency FROM sales_records WHERE source = 'csv'");
+        const key = s => [String(s.book_id), String(s.sale_date).slice(0,10), String(s.units), Number(s.royalties).toFixed(2), s.currency].join("|");
+        const seen = new Set(existing.map(key));
+        let inserted = 0, skipped = 0;
+        for (const sale of sales) {
+          const fingerprint = key(sale);
+          if (seen.has(fingerprint)) { skipped++; continue; }
+          await connection.execute("INSERT INTO sales_records (book_id, sale_date, units, royalties, currency, source) VALUES (?, ?, ?, ?, ?, 'csv')", [sale.book_id, sale.sale_date, sale.units, sale.royalties, sale.currency]);
+          seen.add(fingerprint);
+          inserted++;
+        }
+        await connection.commit();
+        return { inserted, skipped };
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        if (locked) await connection.query("SELECT RELEASE_LOCK('kdp_sales_csv_import')");
+        connection.release();
+      }
     }
   };
 }
