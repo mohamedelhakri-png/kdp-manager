@@ -39,3 +39,14 @@ CREATE TABLE IF NOT EXISTS sales_records (
 
 CREATE INDEX idx_books_status ON books(status);
 CREATE INDEX idx_sales_date ON sales_records(sale_date);
+CREATE TABLE IF NOT EXISTS expenses (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  book_id BIGINT UNSIGNED NULL,
+  expense_date DATE NOT NULL,
+  category VARCHAR(60) NOT NULL,
+  description VARCHAR(255) NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  currency CHAR(3) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_expenses_book FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE SET NULL
+);
