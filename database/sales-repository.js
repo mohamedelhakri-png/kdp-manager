@@ -22,7 +22,7 @@ export function createSalesRepository(poolFactory = createDatabasePool) {
         if (lock.acquired !== 1) throw new Error("Import busy");
         locked = true;
         await connection.beginTransaction();
-        const [existing] = await connection.query("SELECT book_id, sale_date, units, royalties, currency FROM sales_records WHERE source = 'csv'");
+        const [existing] = await connection.query("SELECT book_id, DATE_FORMAT(sale_date, '%Y-%m-%d') AS sale_date, units, royalties, currency FROM sales_records WHERE source = 'csv'");
         const key = s => [String(s.book_id), String(s.sale_date).slice(0,10), String(s.units), Number(s.royalties).toFixed(2), s.currency].join("|");
         const seen = new Set(existing.map(key));
         let inserted = 0, skipped = 0;
