@@ -95,7 +95,7 @@ footer{text-align:center;color:#8892a4;padding:30px;font-size:12px}
 <body>
 <header>
 <h1>KDP Manager</h1>
-<p>Publishing dashboard · Version 0.3</p>
+<p>Publishing dashboard · Version 0.4</p><button id="logout" type="button" style="float:right">Sign out</button>
 </header>
 <nav>
 <button class="active" onclick="show('overview',this)">Overview</button>
@@ -149,6 +149,7 @@ ${books.map(b => `<div class="book"><div><strong>${b.title}</strong><small>${b.c
 </main>
 <footer>KDP Manager 0.3 · Demo Dashboard</footer>
 <script>
+document.getElementById("logout").addEventListener("click",async()=>{await fetch("/api/auth/logout",{method:"POST"});location.assign("/login")});
 function show(id,button){
 document.querySelectorAll("main > div[id]").forEach(el=>el.classList.add("hidden"));
 document.getElementById(id).classList.remove("hidden");
@@ -159,9 +160,37 @@ button.classList.add("active");
 </body>
 </html>`;
 
+const loginPage = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sign in — KDP Manager</title><style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f4f6fa;font:16px Arial,sans-serif;color:#17233d;padding:20px}
+main{width:min(100%,400px);background:#fff;padding:30px;border-radius:16px;box-shadow:0 8px 30px #17233d15}
+h1{margin:0 0 8px}p{color:#64748b}label{display:block;margin-top:18px;font-weight:600}input{display:block;width:100%;margin-top:7px;padding:13px;border:1px solid #cbd5e1;border-radius:9px;font-size:16px}
+button{margin-top:24px;width:100%;padding:14px;background:#2563eb;color:white;border:0;border-radius:9px;font-weight:700;font-size:16px;cursor:pointer}
+#error{color:#b91c1c;min-height:22px}button:disabled{opacity:.6}
+</style></head><body><main><h1>KDP Manager</h1><p>Administrator sign in</p>
+<form id="form"><label>Username<input name="username" autocomplete="username" required maxlength="100"></label>
+<label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+<button id="submit" type="submit">Sign in</button><p id="error" role="alert"></p></form></main>
+<script>
+document.getElementById("form").addEventListener("submit",async e=>{
+e.preventDefault();const button=document.getElementById("submit"),error=document.getElementById("error");
+button.disabled=true;error.textContent="";
+try{const data=new FormData(e.target);const response=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:data.get("username"),password:data.get("password")})});
+if(!response.ok){error.textContent=response.status===429?"Too many attempts. Try again later.":"Unable to sign in.";return}
+location.assign("/");
+}catch{error.textContent="Connection error. Try again."}finally{button.disabled=false}
+});
+</script></body></html>`;
+
 export const server = http.createServer(async (req, res) => {
   const path = new URL(req.url, "http://localhost").pathname;
   if (await handleAuth(req, res, path)) return;
+  if (path === "/login" && req.method === "GET") {
+    if (isAuthenticated(req)) { res.writeHead(302, { Location: "/", "Cache-Control": "no-store" }); res.end(); return; }
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" }); res.end(loginPage); return;
+  }
+  if (path === "/" && !isAuthenticated(req)) { res.writeHead(302, { Location: "/login", "Cache-Control": "no-store" }); res.end(); return; }
   if (path === "/books" && !isAuthenticated(req)) {
     json(res, 401, { error: "Authentication required" });
     return;
@@ -187,7 +216,9 @@ export const server = http.createServer(async (req, res) => {
 
   if (path === "/") {
     res.writeHead(200, {
-      "Content-Type": "text/html; charset=utf-8"
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff"
     });
     res.end(dashboard);
     return;
