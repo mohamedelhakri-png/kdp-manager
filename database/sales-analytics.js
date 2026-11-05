@@ -5,8 +5,8 @@ export function createSalesAnalyticsRepository(poolFactory = createDatabasePool)
   const db = () => pool ||= poolFactory();
   return {
     async filtered({ month = "", bookId = "" } = {}) {
-      if (month && !/^\\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error("Invalid month");
-      if (bookId && !/^[1-9]\\d{0,18}$/.test(bookId)) throw new Error("Invalid book ID");
+      if (month && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error("Invalid month");
+      if (bookId && !/^[1-9]\d{0,18}$/.test(bookId)) throw new Error("Invalid book ID");
       const where = [];
       const params = [];
       if (month) { where.push("s.sale_date >= ? AND s.sale_date < DATE_ADD(?, INTERVAL 1 MONTH)"); params.push(month + "-01", month + "-01"); }
