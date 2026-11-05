@@ -33,10 +33,9 @@ test("Health endpoint works", async () => {
   assert.equal(result.body.status, "ok");
 });
 
-test("Books endpoint returns demo data", async () => {
+test("Books endpoint requires authentication", async () => {
   const result = await request("/books");
-  assert.equal(result.status, 200);
-  assert.equal(result.body.demo, true);
+  assert.equal(result.status, 401);
 });
 
 test("Unknown routes return 404", async () => {
@@ -44,7 +43,7 @@ test("Unknown routes return 404", async () => {
   assert.equal(result.status, 404);
 });
 
-test("Write requests are rejected", async () => {
+test("Unauthenticated writes are rejected", async () => {
   const result = await request("/books", "POST");
-  assert.equal(result.status, 405);
+  assert.equal(result.status, 401);
 });
