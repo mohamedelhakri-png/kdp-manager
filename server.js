@@ -6,6 +6,7 @@ import { createDatabasePool } from "./database/connection.js";
 import { createBooksRepository } from "./database/books-repository.js";
 import { validateBook, validBookId } from "./database/book-validation.js";
 import { validateSale } from "./database/sales-validation.js";
+import { parseSalesCsv } from "./database/sales-csv.js";
 import { createSalesRepository } from "./database/sales-repository.js";
 const booksRepository = createBooksRepository();
 const salesRepository = createSalesRepository();
@@ -54,7 +55,7 @@ const dashboard = `<!doctype html>
 <label>Publication date<input id="book-publication_date" type="date"></label>
 </div><label>Notes<textarea id="book-notes" maxlength="10000" rows="3"></textarea></label>
 <div class="actions"><button id="save-book" type="submit">Save book</button><button id="cancel-edit" type="button" hidden>Cancel edit</button></div><p id="form-message" role="status"></p>
-</form></section><section class="card"><h2>Record a sale</h2><form id="sale-form"><label>Book *<select id="sale-book" required></select></label><div class="fields"><label>Sale date *<input id="sale-date" type="date" required></label><label>Units *<input id="sale-units" type="number" min="0" max="1000000" step="1" value="1" required></label><label>Royalties *<input id="sale-royalties" type="number" min="0" step="0.01" value="0.00" required></label><label>Currency *<select id="sale-currency"><option>USD</option><option>EUR</option><option>GBP</option><option>CAD</option><option>AUD</option><option>JPY</option><option>INR</option><option>BRL</option><option>MXN</option></select></label></div><div class="actions"><button type="submit" id="save-sale">Save sale</button></div><p id="sale-message" role="status"></p></form></section><section class="card"><h2>Sales history</h2><div id="sales-history">Loading…</div></section><section class="card"><h2>My Books</h2><div id="books">Loading…</div></section><p>Data is read from your KDP Manager database. Amazon KDP is not connected; sales must be imported or entered separately.</p></main><script>
+</form></section><section class="card"><h2>Record a sale</h2><form id="sale-form"><label>Book *<select id="sale-book" required></select></label><div class="fields"><label>Sale date *<input id="sale-date" type="date" required></label><label>Units *<input id="sale-units" type="number" min="0" max="1000000" step="1" value="1" required></label><label>Royalties *<input id="sale-royalties" type="number" min="0" step="0.01" value="0.00" required></label><label>Currency *<select id="sale-currency"><option>USD</option><option>EUR</option><option>GBP</option><option>CAD</option><option>AUD</option><option>JPY</option><option>INR</option><option>BRL</option><option>MXN</option></select></label></div><div class="actions"><button type="submit" id="save-sale">Save sale</button></div><p id="sale-message" role="status"></p></form></section><section class="card"><h2>Import sales CSV</h2><p>Use a normalized CSV with columns <code>asin,sale_date,units,royalties,currency</code>. Add each book with its ASIN first. This is not a direct Amazon KDP export importer. Maximum 500 rows / 256 KB. Identical imported rows are skipped; review aggregate reports carefully.</p><label>CSV file<input type="file" id="csv-file" accept=".csv,text/csv"></label><button id="preview-csv" type="button">Preview CSV</button><p id="csv-preview" role="status"></p><button id="import-csv" type="button" disabled>Confirm import</button></section><section class="card"><h2>Sales history</h2><div id="sales-history">Loading…</div></section><section class="card"><h2>My Books</h2><div id="books">Loading…</div></section><p>Data is read from your KDP Manager database. Amazon KDP is not connected; sales must be imported or entered separately.</p></main><script>
 let loadedBooks=[];
 const put=(id,value)=>{document.getElementById(id).textContent=String(value)};
 async function load(){try{const [a,b,c]=await Promise.all([fetch("/books",{cache:"no-store"}),fetch("/api/summary",{cache:"no-store"}),fetch("/api/sales",{cache:"no-store"})]);if(a.status===401||b.status===401||c.status===401){location.assign("/login");return}if(!a.ok||!b.ok||!c.ok)throw Error("Data unavailable");const books=(await a.json()).books,summary=await b.json(),sales=(await c.json()).sales;loadedBooks=books;const options=document.getElementById("sale-book");const selected=options.value;options.replaceChildren();for(const book of books){const option=document.createElement("option");option.value=book.id;option.textContent=book.title;options.append(option)}if(books.some(b=>b.id===selected))options.value=selected;const history=document.getElementById("sales-history");history.replaceChildren();if(!sales.length)history.textContent="No sales recorded yet.";for(const sale of sales){const p=document.createElement("p");p.textContent=[String(sale.sale_date).slice(0,10),sale.book_title,sale.units+" units",sale.royalties+" "+sale.currency].join(" · ");history.append(p)}put("total",summary.totalBooks);put("published",summary.publishedBooks);put("units",summary.unitsSold);const royalties=document.getElementById("royalties");royalties.replaceChildren();if(!summary.royaltiesByCurrency.length)royalties.textContent="No sales records yet.";for(const row of summary.royaltiesByCurrency){const p=document.createElement("p");p.textContent=row.currency+": "+row.royalties+" ("+row.units+" units)";royalties.append(p)}const list=document.getElementById("books");list.replaceChildren();if(!books.length)list.textContent="No books added yet.";for(const book of books){const item=document.createElement("div");item.className="book";const title=document.createElement("strong");title.textContent=book.title;const detail=document.createElement("small");detail.textContent=[book.author,book.category,book.status].filter(Boolean).join(" · ");const edit=document.createElement("button");edit.type="button";edit.className="edit-book";edit.textContent="Edit";edit.addEventListener("click",()=>editBook(book));item.append(title,detail,edit);list.append(item)}}catch{put("error","Unable to load your data. Please try again later.")}}
@@ -65,6 +66,33 @@ document.getElementById("cancel-edit").addEventListener("click",resetForm);
 document.getElementById("book-form").addEventListener("submit",async e=>{e.preventDefault();const id=document.getElementById("book-id").value;const payload={};for(const key of bookFields)payload[key]=document.getElementById("book-"+key).value;const save=document.getElementById("save-book");save.disabled=true;put("form-message","Saving…");try{const response=await fetch(id?"/api/books/"+encodeURIComponent(id):"/api/books",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(response.status===401){location.assign("/login");return}const data=await response.json();if(!response.ok){put("form-message",data.error||"Unable to save book");return}resetForm();put("form-message",id?"Book updated successfully.":"Book added successfully.");await load()}catch{put("form-message","Connection error. Please retry.")}finally{save.disabled=false}});
 document.getElementById("sale-date").value=new Date().toLocaleDateString("en-CA");
 document.getElementById("sale-form").addEventListener("submit",async e=>{e.preventDefault();const button=document.getElementById("save-sale");button.disabled=true;put("sale-message","Saving…");try{const payload={book_id:document.getElementById("sale-book").value,sale_date:document.getElementById("sale-date").value,units:Number(document.getElementById("sale-units").value),royalties:document.getElementById("sale-royalties").value,currency:document.getElementById("sale-currency").value};const r=await fetch("/api/sales",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(r.status===401){location.assign("/login");return}const data=await r.json();if(!r.ok){put("sale-message",data.error||"Unable to save sale");return}put("sale-message","Sale recorded.");await load()}catch{put("sale-message","Connection error. Please retry.")}finally{button.disabled=false}});
+let pendingCsv="";
+document.getElementById("preview-csv").addEventListener("click",async()=>{
+  const file=document.getElementById("csv-file").files[0];
+  const confirm=document.getElementById("import-csv");
+  confirm.disabled=true;pendingCsv="";
+  if(!file||file.size>262144){put("csv-preview","Select a CSV file up to 256 KB.");return}
+  const csv=await file.text();
+  const lines=csv.trim().split(/\r?\n/);
+  if(lines.length<2||lines.length>501||lines[0].replace(/^\uFEFF/,"").trim().toLowerCase()!=="asin,sale_date,units,royalties,currency"){put("csv-preview","Expected header: asin,sale_date,units,royalties,currency; 1–500 rows.");return}
+  pendingCsv=csv;
+  put("csv-preview",String(lines.length-1)+" data rows detected. Server will validate ASINs, dates, amounts and duplicates before saving. Confirm only after reviewing the source.");
+  confirm.disabled=false;
+});
+document.getElementById("csv-file").addEventListener("change",()=>{pendingCsv="";document.getElementById("import-csv").disabled=true;put("csv-preview","")});
+document.getElementById("import-csv").addEventListener("click",async()=>{
+  if(!pendingCsv)return;
+  const button=document.getElementById("import-csv");button.disabled=true;
+  put("csv-preview","Importing…");
+  try {
+    const r=await fetch("/api/sales/import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({csv:pendingCsv})});
+    if(r.status===401){location.assign("/login");return}
+    const data=await r.json();
+    if(!r.ok){put("csv-preview",data.error||"Import failed");return}
+    put("csv-preview",data.inserted+" rows imported; "+data.skipped+" duplicates skipped.");
+    pendingCsv="";await load();
+  }catch{put("csv-preview","Import failed. Please retry after checking sales history.")}
+});
 document.getElementById("logout").addEventListener("click",async()=>{await fetch("/api/auth/logout",{method:"POST"});location.assign("/login")});load();
 </script></body></html>`;
 
@@ -141,6 +169,33 @@ export const server = http.createServer(async (req, res) => {
     } catch (error) {
       if (error instanceof SyntaxError) json(res, 400, { error: "Invalid JSON" });
       else { console.error(JSON.stringify({ event: "sale_write_failed", code: error.code || "DB_ERROR" })); json(res, 503, { error: "Unable to save sale" }); }
+    }
+    return;
+  }
+  if (path === "/api/sales/import" && req.method === "POST") {
+    if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
+    const origin = req.headers.origin;
+    if (origin) {
+      let valid = false;
+      try { const url = new URL(origin); valid = url.protocol === "https:" && url.host === req.headers.host; } catch {}
+      if (!valid) { json(res, 403, { error: "Forbidden" }); return; }
+    }
+    if (!(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) { json(res, 415, { error: "JSON required" }); return; }
+    let raw = "";
+    try {
+      for await (const chunk of req) {
+        raw += chunk.toString();
+        if (Buffer.byteLength(raw) > 300000) { json(res, 413, { error: "Request too large" }); return; }
+      }
+      const csv = JSON.parse(raw)?.csv;
+      const books = await booksRepository.list();
+      const { sales, error } = parseSalesCsv(csv, books);
+      if (error) { json(res, 400, { error }); return; }
+      const result = await salesRepository.importCsv(sales);
+      json(res, 200, result);
+    } catch (error) {
+      if (error instanceof SyntaxError) json(res, 400, { error: "Invalid JSON" });
+      else { console.error(JSON.stringify({ event: "csv_import_failed", code: error.code || "DB_ERROR" })); json(res, 503, { error: "Unable to import CSV" }); }
     }
     return;
   }
