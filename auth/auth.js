@@ -38,6 +38,7 @@ export function isAuthenticated(req) {
   return true;
 }
 export function createAuthHandler(poolFactory = createDatabasePool) {
+  let sharedPool;
   return async function handleAuth(req, res, path) {
     if (path === "/api/auth/session" && req.method === "GET") {
       send(res, 200, { authenticated: isAuthenticated(req) });
@@ -67,7 +68,7 @@ export function createAuthHandler(poolFactory = createDatabasePool) {
       if (typeof username !== "string" || username.length > 100 || typeof password !== "string" || Buffer.byteLength(password) > 1024) {
         current.count++; send(res, 401, { error: "Invalid credentials" }); return true;
       }
-      const pool = poolFactory();
+      const pool = sharedPool ||= poolFactory();
       const [rows] = await pool.execute("SELECT id, password_hash FROM admin_users WHERE username = ? LIMIT 1", [username]);
       const valid = rows.length === 1 && await verifyPassword(password, rows[0].password_hash);
       if (!valid) { current.count++; send(res, 401, { error: "Invalid credentials" }); return true; }
