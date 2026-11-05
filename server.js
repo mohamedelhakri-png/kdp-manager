@@ -1,5 +1,22 @@
 
 import http from "node:http";
+import { createDatabasePool } from "./database/connection.js";
+
+async function checkDatabaseOnStartup() {
+  let pool;
+  try {
+    pool = createDatabasePool();
+    const [rows] = await pool.query("SHOW TABLES");
+    const names = new Set(rows.map(row => Object.values(row)[0]));
+    const missing = ["admin_users", "books", "sales_records"].filter(name => !names.has(name));
+    console.log(JSON.stringify({ level: missing.length ? "WARN" : "LOG", event: "kdp_database_check", connection: "ok", tables: missing.length ? "missing" : "ok", missing }));
+  } catch (error) {
+    console.error(JSON.stringify({ level: "ERROR", event: "kdp_database_check", connection: "failed", code: typeof error.code === "string" ? error.code : "CONFIGURATION_ERROR" }));
+  } finally {
+    if (pool) await pool.end();
+  }
+}
+
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -174,6 +191,7 @@ export const server = http.createServer((req, res) => {
 });
 
 if (process.env.NODE_ENV !== "test") {
+  void checkDatabaseOnStartup();
   server.listen(PORT, "0.0.0.0", () => {
     console.log("KDP Manager running on port " + PORT);
   });
