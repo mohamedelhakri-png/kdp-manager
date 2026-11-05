@@ -1,6 +1,11 @@
 
 import http from "node:http";
+import { createAuthHandler, isAuthenticated } from "./auth/auth.js";
+const handleAuth = createAuthHandler();
 import { createDatabasePool } from "./database/connection.js";
+import { createBooksRepository } from "./database/books-repository.js";
+import { validateBook, validBookId } from "./database/book-validation.js";
+const booksRepository = createBooksRepository();
 
 async function checkDatabaseOnStartup() {
   let pool;
@@ -20,150 +25,99 @@ async function checkDatabaseOnStartup() {
 
 const PORT = Number(process.env.PORT || 3000);
 
-const books = [
-  {
-    id: 1,
-    title: "The Quiet Garden",
-    category: "Coloring Book",
-    status: "Published",
-    sales: 42,
-    revenue: 126.00
-  },
-  {
-    id: 2,
-    title: "Mindful Daily Planner",
-    category: "Planner",
-    status: "Published",
-    sales: 28,
-    revenue: 112.00
-  },
-  {
-    id: 3,
-    title: "Little Explorers Activity Book",
-    category: "Activity Book",
-    status: "Draft",
-    sales: 0,
-    revenue: 0
-  }
-];
-
 const json = (res, status, data) => {
   res.writeHead(status, {
-    "Content-Type": "application/json; charset=utf-8"
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff"
   });
   res.end(JSON.stringify(data));
 };
 
-const dashboard = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>KDP Manager</title>
-<style>
-*{box-sizing:border-box}
-body{margin:0;background:#f4f6fa;color:#17233d;font-family:Arial,sans-serif}
-header{background:#17233d;color:white;padding:20px}
-header h1{margin:0;font-size:24px}
-header p{color:#b9c6db;margin:8px 0 0}
-nav{display:flex;gap:10px;overflow-x:auto;padding:15px;background:white}
-nav button{border:0;border-radius:9px;padding:12px 16px;background:#eef1f7;color:#17233d;font-weight:bold;cursor:pointer;white-space:nowrap}
-nav button.active{background:#2563eb;color:white}
-main{max-width:1100px;margin:auto;padding:20px}
-.notice{background:#fff5d9;padding:14px;border-radius:10px;margin-bottom:20px;color:#7a5600}
-.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
-.card{background:white;padding:20px;border-radius:14px;box-shadow:0 3px 14px #15213d0a}
-.card small{color:#718096}
-.card strong{display:block;font-size:27px;margin-top:12px}
-section{margin-top:22px}
-h2{font-size:21px}
-.book{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #edf0f5;padding:15px 0}
-.book:last-child{border:0}
-.book strong{display:block}
-.book small{display:block;margin-top:7px;color:#718096}
-.pill{font-size:12px;padding:6px 10px;border-radius:20px;background:#dcfce7;color:#166534;height:max-content}
-.pill.draft{background:#fef3c7;color:#92400e}
-.bar{height:12px;background:#e9eef8;border-radius:10px;overflow:hidden;margin:10px 0 18px}
-.bar span{display:block;height:100%;background:#2563eb;border-radius:10px}
-.hidden{display:none}
-footer{text-align:center;color:#8892a4;padding:30px;font-size:12px}
-@media(min-width:800px){.stats{grid-template-columns:repeat(4,1fr)}header{padding:30px 8%}}
-</style>
-</head>
-<body>
-<header>
-<h1>KDP Manager</h1>
-<p>Publishing dashboard · Version 0.3</p>
-</header>
-<nav>
-<button class="active" onclick="show('overview',this)">Overview</button>
-<button onclick="show('books',this)">My Books</button>
-<button onclick="show('analytics',this)">Analytics</button>
-<button onclick="show('reports',this)">Reports</button>
-</nav>
-<main>
-<div class="notice">DEMO MODE — All book titles, sales and earnings are fictional. No Amazon KDP account is connected.</div>
-<div id="overview">
-<h2>Dashboard Overview</h2>
-<div class="stats">
-<div class="card"><small>Total Books</small><strong>3</strong></div>
-<div class="card"><small>Published</small><strong>2</strong></div>
-<div class="card"><small>Units Sold</small><strong>70</strong></div>
-<div class="card"><small>Demo Revenue</small><strong>$238</strong></div>
-</div>
-<section class="card">
-<h2>Welcome to KDP Manager</h2>
-<p>Your publishing workspace is online and ready for the next development stage.</p>
-<p>Explore the demonstration data using the navigation tabs.</p>
-</section>
-</div>
-<div id="books" class="hidden">
-<h2>My Books</h2>
-<div class="card">
-${books.map(b => `<div class="book"><div><strong>${b.title}</strong><small>${b.category} · ${b.sales} sales · $${b.revenue.toFixed(2)}</small></div><span class="pill ${b.status === "Draft" ? "draft" : ""}">${b.status}</span></div>`).join("")}
-</div>
-</div>
-<div id="analytics" class="hidden">
-<h2>Sales Analytics</h2>
-<div class="card">
-<p>The Quiet Garden — 42 sales</p>
-<div class="bar"><span style="width:100%"></span></div>
-<p>Mindful Daily Planner — 28 sales</p>
-<div class="bar"><span style="width:67%"></span></div>
-<p>Little Explorers Activity Book — 0 sales</p>
-<div class="bar"><span style="width:0%"></span></div>
-</div>
-</div>
-<div id="reports" class="hidden">
-<h2>Publishing Reports</h2>
-<div class="card">
-<p><strong>Demo total sales:</strong> 70</p>
-<p><strong>Demo total revenue:</strong> $238.00</p>
-<p><strong>Published books:</strong> 2</p>
-<p><strong>Draft books:</strong> 1</p>
-<p>CSV exports and real KDP report imports are planned for a later version.</p>
-</div>
-</div>
-</main>
-<footer>KDP Manager 0.3 · Demo Dashboard</footer>
-<script>
-function show(id,button){
-document.querySelectorAll("main > div[id]").forEach(el=>el.classList.add("hidden"));
-document.getElementById(id).classList.remove("hidden");
-document.querySelectorAll("nav button").forEach(el=>el.classList.remove("active"));
-button.classList.add("active");
-}
-</script>
-</body>
-</html>`;
+const dashboard = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KDP Manager</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f4f6fa;color:#17233d;font:16px Arial,sans-serif}header{background:#17233d;color:white;padding:20px}header h1{margin:0 0 8px}header p{margin:0;color:#b9c6db}button{cursor:pointer;border:0;border-radius:9px;padding:10px 16px}#logout{float:right;background:#fff;color:#17233d}main{max-width:1000px;margin:auto;padding:20px}.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.card{background:white;padding:20px;border-radius:12px;margin-bottom:14px;box-shadow:0 3px 14px #15213d0a}.card small{display:block;color:#64748b}.card strong{display:block;font-size:25px;margin-top:10px}.book{padding:14px 0;border-bottom:1px solid #e2e8f0}.book:last-child{border:0}.book small{margin-top:6px}#error{color:#b91c1c}.fields{display:grid;grid-template-columns:1fr;gap:12px}label{display:block;margin:10px 0;font-weight:600}input,select,textarea{display:block;width:100%;padding:11px;margin-top:6px;border:1px solid #cbd5e1;border-radius:8px;font:inherit}.actions{display:flex;gap:10px;flex-wrap:wrap}.actions button{background:#2563eb;color:white}.actions button:disabled{opacity:.6}#form-message{min-height:20px;color:#334155}.edit-book{margin-top:8px;background:#e2e8f0}@media(min-width:700px){.fields{grid-template-columns:repeat(2,1fr)}}@media(min-width:700px){.stats{grid-template-columns:repeat(3,1fr)}}
+</style></head><body><header><button id="logout" type="button">Sign out</button><h1>KDP Manager</h1><p>Private publishing dashboard</p></header><main><p id="error" role="alert"></p><div class="stats"><div class="card"><small>Total books</small><strong id="total">—</strong></div><div class="card"><small>Published books</small><strong id="published">—</strong></div><div class="card"><small>Units sold</small><strong id="units">—</strong></div></div><section class="card"><h2>Royalties by currency</h2><div id="royalties">Loading…</div></section><section class="card"><h2 id="form-heading">Add a book</h2><form id="book-form">
+<input type="hidden" id="book-id">
+<div class="fields">
+<label>Title *<input id="book-title" maxlength="255" required></label>
+<label>Subtitle<input id="book-subtitle" maxlength="255"></label>
+<label>Author<input id="book-author" maxlength="255"></label>
+<label>ASIN<input id="book-asin" maxlength="20"></label>
+<label>ISBN<input id="book-isbn" maxlength="20"></label>
+<label>Category<input id="book-category" maxlength="150"></label>
+<label>Format<input id="book-format" maxlength="50" placeholder="Paperback, Kindle, Hardcover"></label>
+<label>Status<select id="book-status"><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></label>
+<label>Publication date<input id="book-publication_date" type="date"></label>
+</div><label>Notes<textarea id="book-notes" maxlength="10000" rows="3"></textarea></label>
+<div class="actions"><button id="save-book" type="submit">Save book</button><button id="cancel-edit" type="button" hidden>Cancel edit</button></div><p id="form-message" role="status"></p>
+</form></section><section class="card"><h2>My Books</h2><div id="books">Loading…</div></section><p>Data is read from your KDP Manager database. Amazon KDP is not connected; sales must be imported or entered separately.</p></main><script>
+let loadedBooks=[];
+const put=(id,value)=>{document.getElementById(id).textContent=String(value)};
+async function load(){try{const [a,b]=await Promise.all([fetch("/books",{cache:"no-store"}),fetch("/api/summary",{cache:"no-store"})]);if(a.status===401||b.status===401){location.assign("/login");return}if(!a.ok||!b.ok)throw Error("Data unavailable");const books=(await a.json()).books,summary=await b.json();loadedBooks=books;put("total",summary.totalBooks);put("published",summary.publishedBooks);put("units",summary.unitsSold);const royalties=document.getElementById("royalties");royalties.replaceChildren();if(!summary.royaltiesByCurrency.length)royalties.textContent="No sales records yet.";for(const row of summary.royaltiesByCurrency){const p=document.createElement("p");p.textContent=row.currency+": "+row.royalties+" ("+row.units+" units)";royalties.append(p)}const list=document.getElementById("books");list.replaceChildren();if(!books.length)list.textContent="No books added yet.";for(const book of books){const item=document.createElement("div");item.className="book";const title=document.createElement("strong");title.textContent=book.title;const detail=document.createElement("small");detail.textContent=[book.author,book.category,book.status].filter(Boolean).join(" · ");const edit=document.createElement("button");edit.type="button";edit.className="edit-book";edit.textContent="Edit";edit.addEventListener("click",()=>editBook(book));item.append(title,detail,edit);list.append(item)}}catch{put("error","Unable to load your data. Please try again later.")}}
+const bookFields=["title","subtitle","author","asin","isbn","category","format","status","publication_date","notes"];
+function resetForm(){document.getElementById("book-form").reset();put("book-id","");document.getElementById("book-id").value="";put("form-heading","Add a book");document.getElementById("cancel-edit").hidden=true;put("form-message","")}
+function editBook(book){document.getElementById("book-id").value=book.id;for(const key of bookFields){let value=book[key]??"";if(key==="publication_date"&&value)value=String(value).slice(0,10);document.getElementById("book-"+key).value=value}put("form-heading","Edit book");document.getElementById("cancel-edit").hidden=false;put("form-message","");document.getElementById("book-form").scrollIntoView({behavior:"smooth"})}
+document.getElementById("cancel-edit").addEventListener("click",resetForm);
+document.getElementById("book-form").addEventListener("submit",async e=>{e.preventDefault();const id=document.getElementById("book-id").value;const payload={};for(const key of bookFields)payload[key]=document.getElementById("book-"+key).value;const save=document.getElementById("save-book");save.disabled=true;put("form-message","Saving…");try{const response=await fetch(id?"/api/books/"+encodeURIComponent(id):"/api/books",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(response.status===401){location.assign("/login");return}const data=await response.json();if(!response.ok){put("form-message",data.error||"Unable to save book");return}resetForm();put("form-message",id?"Book updated successfully.":"Book added successfully.");await load()}catch{put("form-message","Connection error. Please retry.")}finally{save.disabled=false}});
+document.getElementById("logout").addEventListener("click",async()=>{await fetch("/api/auth/logout",{method:"POST"});location.assign("/login")});load();
+</script></body></html>`;
 
-export const server = http.createServer((req, res) => {
+const loginPage = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in — KDP Manager</title><style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f4f6fa;color:#17233d;font:16px Arial,sans-serif}main{width:min(92vw,410px);background:white;padding:28px;border-radius:16px;box-shadow:0 6px 28px #17233d16}h1{margin-top:0}label{display:block;margin:16px 0}input{display:block;width:100%;padding:13px;margin-top:7px;border:1px solid #cbd5e1;border-radius:8px;font:inherit}button{width:100%;padding:13px;border:0;border-radius:8px;background:#1d4ed8;color:white;font:inherit;cursor:pointer}button:disabled{opacity:.6}#error{color:#b91c1c;min-height:22px}
+</style></head><body><main><h1>KDP Manager</h1><p>Administrator sign in</p><form id="login-form"><label>Username<input id="username" autocomplete="username" required maxlength="100"></label><label>Password<input id="password" type="password" autocomplete="current-password" required></label><button id="submit" type="submit">Sign in</button><p id="error" role="alert"></p></form></main><script>
+document.getElementById("login-form").addEventListener("submit",async event=>{event.preventDefault();const button=document.getElementById("submit"),error=document.getElementById("error");button.disabled=true;error.textContent="";try{const response=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:document.getElementById("username").value,password:document.getElementById("password").value})});if(!response.ok){error.textContent=response.status===429?"Too many attempts. Try again later.":"Invalid credentials or service unavailable.";return}location.assign("/")}catch{error.textContent="Connection error. Please retry."}finally{button.disabled=false}});
+</script></body></html>`;
+
+export const server = http.createServer(async (req, res) => {
+  const path = new URL(req.url, "http://localhost").pathname;
+  if (await handleAuth(req, res, path)) return;
+  if (path === "/login" && req.method === "GET") {
+    if (isAuthenticated(req)) { res.writeHead(302, { Location: "/", "Cache-Control": "no-store" }); res.end(); return; }
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" }); res.end(loginPage); return;
+  }
+  if (path === "/" && !isAuthenticated(req)) { res.writeHead(302, { Location: "/login", "Cache-Control": "no-store" }); res.end(); return; }
+  if (path === "/books" && !isAuthenticated(req)) {
+    json(res, 401, { error: "Authentication required" });
+    return;
+  }
+  const bookId = /^\/api\/books\/([^/]+)$/.exec(path)?.[1];
+  if ((path === "/api/books" && req.method === "POST") || (bookId && req.method === "PUT")) {
+    if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
+    const origin = req.headers.origin;
+    if (origin) {
+      let valid = false;
+      try { const url = new URL(origin); valid = url.protocol === "https:" && url.host === req.headers.host; } catch {}
+      if (!valid) { json(res, 403, { error: "Forbidden" }); return; }
+    }
+    if (!(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) { json(res, 415, { error: "JSON required" }); return; }
+    if (bookId && !validBookId(bookId)) { json(res, 400, { error: "Invalid book ID" }); return; }
+    let raw = "";
+    try {
+      for await (const chunk of req) {
+        raw += chunk.toString();
+        if (Buffer.byteLength(raw) > 16384) { json(res, 413, { error: "Request too large" }); return; }
+      }
+      const { book, error } = validateBook(JSON.parse(raw));
+      if (error) { json(res, 400, { error }); return; }
+      if (bookId) {
+        const updated = await booksRepository.update(bookId, book);
+        json(res, updated ? 200 : 404, updated ? { ok: true } : { error: "Book not found" });
+      } else {
+        const created = await booksRepository.create(book);
+        json(res, 201, created);
+      }
+    } catch (error) {
+      if (error instanceof SyntaxError) json(res, 400, { error: "Invalid JSON" });
+      else { console.error(JSON.stringify({ event: "book_write_failed", code: error.code || "DB_ERROR" })); json(res, 503, { error: "Unable to save book" }); }
+    }
+    return;
+  }
   if (req.method !== "GET") {
     json(res, 405, { error: "Method not allowed" });
     return;
   }
-
-  const path = new URL(req.url, "http://localhost").pathname;
 
   if (path === "/health") {
     json(res, 200, {
@@ -175,13 +129,22 @@ export const server = http.createServer((req, res) => {
   }
 
   if (path === "/books") {
-    json(res, 200, { books, demo: true });
+    try { json(res, 200, { books: await booksRepository.list(), demo: false }); }
+    catch (error) { console.error(JSON.stringify({ event: "books_read_failed", code: error.code || "DB_ERROR" })); json(res, 503, { error: "Books temporarily unavailable" }); }
+    return;
+  }
+  if (path === "/api/summary") {
+    if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
+    try { json(res, 200, { ...(await booksRepository.summary()), royaltiesByCurrency: await booksRepository.salesSummary() }); }
+    catch (error) { console.error(JSON.stringify({ event: "summary_read_failed", code: error.code || "DB_ERROR" })); json(res, 503, { error: "Summary temporarily unavailable" }); }
     return;
   }
 
   if (path === "/") {
     res.writeHead(200, {
-      "Content-Type": "text/html; charset=utf-8"
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff"
     });
     res.end(dashboard);
     return;

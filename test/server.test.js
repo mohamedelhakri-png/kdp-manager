@@ -33,10 +33,9 @@ test("Health endpoint works", async () => {
   assert.equal(result.body.status, "ok");
 });
 
-test("Books endpoint returns demo data", async () => {
+test("Books endpoint requires authentication", async () => {
   const result = await request("/books");
-  assert.equal(result.status, 200);
-  assert.equal(result.body.demo, true);
+  assert.equal(result.status, 401);
 });
 
 test("Unknown routes return 404", async () => {
@@ -44,7 +43,41 @@ test("Unknown routes return 404", async () => {
   assert.equal(result.status, 404);
 });
 
-test("Write requests are rejected", async () => {
+test("Unauthenticated writes are rejected", async () => {
   const result = await request("/books", "POST");
-  assert.equal(result.status, 405);
+  assert.equal(result.status, 401);
+});
+
+test("Summary endpoint requires authentication", async () => {
+  const result = await request("/api/summary");
+  assert.equal(result.status, 401);
+  assert.equal(result.body.error, "Authentication required");
+});
+
+test("Login page renders successfully without authentication", async () => {
+  await new Promise((resolve, reject) => {
+    server.listen(0, "127.0.0.1", async () => {
+      try {
+        const response = await fetch("http://127.0.0.1:" + server.address().port + "/login");
+        const html = await response.text();
+        assert.equal(response.status, 200);
+        assert.match(response.headers.get("content-type"), /text\/html/);
+        assert.match(html, /id="login-form"/);
+        assert.match(html, /api\/auth\/login/);
+        server.close(resolve);
+      } catch (error) { server.close(); reject(error); }
+    });
+  });
+});
+test("Anonymous dashboard access redirects to login", async () => {
+  await new Promise((resolve, reject) => {
+    server.listen(0, "127.0.0.1", async () => {
+      try {
+        const response = await fetch("http://127.0.0.1:" + server.address().port + "/", { redirect: "manual" });
+        assert.equal(response.status, 302);
+        assert.equal(response.headers.get("location"), "/login");
+        server.close(resolve);
+      } catch (error) { server.close(); reject(error); }
+    });
+  });
 });
