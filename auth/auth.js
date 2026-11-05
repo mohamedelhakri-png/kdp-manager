@@ -86,7 +86,7 @@ export function createAuthHandler(poolFactory = createDatabasePool) {
     try {
       for await (const chunk of req) {
         body += chunk.toString();
-        if (Buffer.byteLength(body) > 4096) { send(res, 413, { error: "Request too large" }); return true; }
+        if (Buffer.byteLength(body) > 4096) { current.count++; send(res, 413, { error: "Request too large" }); return true; }
       }
       const parsed = JSON.parse(body);
       const username = parsed?.username, password = parsed?.password;
