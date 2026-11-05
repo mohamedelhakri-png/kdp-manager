@@ -36,3 +36,22 @@ test("summary reads books and sales without mixing royalty currencies", async ()
   assert.equal(queries.length, 3);
   for (const sql of queries) assert.doesNotMatch(sql, /\b(INSERT|UPDATE|DELETE|DROP)\b/i);
 });
+
+test("create and update use placeholders and preserve existing rows", async () => {
+  const calls = [];
+  const repo = createBooksRepository(() => ({
+    async execute(sql, values) {
+      calls.push({ sql, values });
+      return sql.startsWith("INSERT") ? [{ insertId: 123n, affectedRows: 1 }] : [{ affectedRows: 1 }];
+    }
+  }));
+  const book = { title: "My book", subtitle: null, author: null, asin: null, isbn: null, category: null, format: null, status: "draft", publication_date: null, notes: null };
+  assert.deepEqual(await repo.create(book), { id: "123" });
+  assert.equal(await repo.update("123", book), true);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].values[0], "My book");
+  assert.equal(calls[1].values.at(-1), "123");
+  assert.equal((calls[0].sql.match(/\?/g) || []).length, 10);
+  assert.equal((calls[1].sql.match(/\?/g) || []).length, 11);
+  assert.doesNotMatch(calls.map(c => c.sql).join(" "), /\bDELETE\b|\bDROP\b/i);
+});
