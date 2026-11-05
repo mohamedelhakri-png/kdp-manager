@@ -1,5 +1,6 @@
 
 import http from "node:http";
+import { handleGoogleDrive } from "./integrations/google-drive.js";
 import { createAuthHandler, isAuthenticated } from "./auth/auth.js";
 const handleAuth = createAuthHandler();
 import { createDatabasePool } from "./database/connection.js";
@@ -139,6 +140,7 @@ document.getElementById("login-form").addEventListener("submit",async event=>{ev
 export const server = http.createServer(async (req, res) => {
   const path = new URL(req.url, "http://localhost").pathname;
   if (await handleAuth(req, res, path)) return;
+  if (await handleGoogleDrive(req, res, path)) return;
   if (path === "/login" && req.method === "GET") {
     if (isAuthenticated(req)) { res.writeHead(302, { Location: "/", "Cache-Control": "no-store" }); res.end(); return; }
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" }); res.end(loginPage); return;
