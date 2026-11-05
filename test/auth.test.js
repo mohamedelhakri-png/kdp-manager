@@ -16,3 +16,21 @@ test("non-auth route is not intercepted", async () => {
   const handler = createAuthHandler(() => { throw new Error("should not connect"); });
   assert.equal(await handler({ method: "GET" }, {}, "/health"), false);
 });
+
+test("login rejects cross-origin requests before database access", async () => {
+  const handler = createAuthHandler(() => { throw new Error("Database should not be accessed"); });
+  const req = { method: "POST", headers: { host: "example.com", origin: "https://attacker.example", "content-type": "application/json" } };
+  let status, payload;
+  const res = { writeHead(code) { status = code; }, end(data) { payload = JSON.parse(data); } };
+  assert.equal(await handler(req, res, "/api/auth/login"), true);
+  assert.equal(status, 403);
+  assert.equal(payload.error, "Forbidden");
+});
+test("login rejects unsupported content type", async () => {
+  const handler = createAuthHandler(() => { throw new Error("Database should not be accessed"); });
+  const req = { method: "POST", headers: { host: "example.com", "content-type": "text/plain" } };
+  let status;
+  const res = { writeHead(code) { status = code; }, end() {} };
+  assert.equal(await handler(req, res, "/api/auth/login"), true);
+  assert.equal(status, 415);
+});
