@@ -53,3 +53,31 @@ test("Summary endpoint requires authentication", async () => {
   assert.equal(result.status, 401);
   assert.equal(result.body.error, "Authentication required");
 });
+
+test("Login page renders successfully without authentication", async () => {
+  await new Promise((resolve, reject) => {
+    server.listen(0, "127.0.0.1", async () => {
+      try {
+        const response = await fetch("http://127.0.0.1:" + server.address().port + "/login");
+        const html = await response.text();
+        assert.equal(response.status, 200);
+        assert.match(response.headers.get("content-type"), /text\/html/);
+        assert.match(html, /id="login-form"/);
+        assert.match(html, /api\/auth\/login/);
+        server.close(resolve);
+      } catch (error) { server.close(); reject(error); }
+    });
+  });
+});
+test("Anonymous dashboard access redirects to login", async () => {
+  await new Promise((resolve, reject) => {
+    server.listen(0, "127.0.0.1", async () => {
+      try {
+        const response = await fetch("http://127.0.0.1:" + server.address().port + "/", { redirect: "manual" });
+        assert.equal(response.status, 302);
+        assert.equal(response.headers.get("location"), "/login");
+        server.close(resolve);
+      } catch (error) { server.close(); reject(error); }
+    });
+  });
+});
