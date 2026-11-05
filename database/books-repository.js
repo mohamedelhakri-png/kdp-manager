@@ -10,6 +10,20 @@ export function createBooksRepository(poolFactory = createDatabasePool) {
       );
       return rows.map(row => ({ ...row, id: String(row.id) }));
     },
+    async create(book) {
+      const [result] = await db().execute(
+        "INSERT INTO books (title, subtitle, author, asin, isbn, category, format, status, publication_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [book.title, book.subtitle, book.author, book.asin, book.isbn, book.category, book.format, book.status, book.publication_date, book.notes]
+      );
+      return { id: String(result.insertId) };
+    },
+    async update(id, book) {
+      const [result] = await db().execute(
+        "UPDATE books SET title = ?, subtitle = ?, author = ?, asin = ?, isbn = ?, category = ?, format = ?, status = ?, publication_date = ?, notes = ? WHERE id = ?",
+        [book.title, book.subtitle, book.author, book.asin, book.isbn, book.category, book.format, book.status, book.publication_date, book.notes, id]
+      );
+      return result.affectedRows > 0;
+    },
     async summary() {
       const [[counts], [sales]] = await Promise.all([
         db().execute("SELECT COUNT(*) AS total_books, SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END) AS published_books FROM books"),
