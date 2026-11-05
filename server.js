@@ -3,6 +3,8 @@ import http from "node:http";
 import { createAuthHandler, isAuthenticated } from "./auth/auth.js";
 const handleAuth = createAuthHandler();
 import { createDatabasePool } from "./database/connection.js";
+import { createBooksRepository } from "./database/books-repository.js";
+const booksRepository = createBooksRepository();
 
 async function checkDatabaseOnStartup() {
   let pool;
@@ -22,7 +24,7 @@ async function checkDatabaseOnStartup() {
 
 const PORT = Number(process.env.PORT || 3000);
 
-const books = [
+const demoBooks = [
   {
     id: 1,
     title: "The Quiet Garden",
@@ -122,7 +124,7 @@ footer{text-align:center;color:#8892a4;padding:30px;font-size:12px}
 <div id="books" class="hidden">
 <h2>My Books</h2>
 <div class="card">
-${books.map(b => `<div class="book"><div><strong>${b.title}</strong><small>${b.category} · ${b.sales} sales · $${b.revenue.toFixed(2)}</small></div><span class="pill ${b.status === "Draft" ? "draft" : ""}">${b.status}</span></div>`).join("")}
+${demoBooks.map(b => `<div class="book"><div><strong>${b.title}</strong><small>${b.category} · ${b.sales} sales · $${b.revenue.toFixed(2)}</small></div><span class="pill ${b.status === "Draft" ? "draft" : ""}">${b.status}</span></div>`).join("")}
 </div>
 </div>
 <div id="analytics" class="hidden">
@@ -210,7 +212,14 @@ export const server = http.createServer(async (req, res) => {
   }
 
   if (path === "/books") {
-    json(res, 200, { books, demo: true });
+    try { json(res, 200, { books: await booksRepository.list(), demo: false }); }
+    catch (error) { console.error(JSON.stringify({ event: "books_read_failed", code: error.code || "DB_ERROR" })); json(res, 503, { error: "Books temporarily unavailable" }); }
+    return;
+  }
+  if (path === "/api/summary") {
+    if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
+    try { json(res, 200, { ...(await booksRepository.summary()), royaltiesByCurrency: await booksRepository.salesSummary() }); }
+    catch (error) { console.error(JSON.stringify({ event: "summary_read_failed", code: error.code || "DB_ERROR" })); json(res, 503, { error: "Summary temporarily unavailable" }); }
     return;
   }
 
