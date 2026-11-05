@@ -24,33 +24,6 @@ async function checkDatabaseOnStartup() {
 
 const PORT = Number(process.env.PORT || 3000);
 
-const demoBooks = [
-  {
-    id: 1,
-    title: "The Quiet Garden",
-    category: "Coloring Book",
-    status: "Published",
-    sales: 42,
-    revenue: 126.00
-  },
-  {
-    id: 2,
-    title: "Mindful Daily Planner",
-    category: "Planner",
-    status: "Published",
-    sales: 28,
-    revenue: 112.00
-  },
-  {
-    id: 3,
-    title: "Little Explorers Activity Book",
-    category: "Activity Book",
-    status: "Draft",
-    sales: 0,
-    revenue: 0
-  }
-];
-
 const json = (res, status, data) => {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8"
@@ -58,131 +31,13 @@ const json = (res, status, data) => {
   res.end(JSON.stringify(data));
 };
 
-const dashboard = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>KDP Manager</title>
-<style>
-*{box-sizing:border-box}
-body{margin:0;background:#f4f6fa;color:#17233d;font-family:Arial,sans-serif}
-header{background:#17233d;color:white;padding:20px}
-header h1{margin:0;font-size:24px}
-header p{color:#b9c6db;margin:8px 0 0}
-nav{display:flex;gap:10px;overflow-x:auto;padding:15px;background:white}
-nav button{border:0;border-radius:9px;padding:12px 16px;background:#eef1f7;color:#17233d;font-weight:bold;cursor:pointer;white-space:nowrap}
-nav button.active{background:#2563eb;color:white}
-main{max-width:1100px;margin:auto;padding:20px}
-.notice{background:#fff5d9;padding:14px;border-radius:10px;margin-bottom:20px;color:#7a5600}
-.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
-.card{background:white;padding:20px;border-radius:14px;box-shadow:0 3px 14px #15213d0a}
-.card small{color:#718096}
-.card strong{display:block;font-size:27px;margin-top:12px}
-section{margin-top:22px}
-h2{font-size:21px}
-.book{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #edf0f5;padding:15px 0}
-.book:last-child{border:0}
-.book strong{display:block}
-.book small{display:block;margin-top:7px;color:#718096}
-.pill{font-size:12px;padding:6px 10px;border-radius:20px;background:#dcfce7;color:#166534;height:max-content}
-.pill.draft{background:#fef3c7;color:#92400e}
-.bar{height:12px;background:#e9eef8;border-radius:10px;overflow:hidden;margin:10px 0 18px}
-.bar span{display:block;height:100%;background:#2563eb;border-radius:10px}
-.hidden{display:none}
-footer{text-align:center;color:#8892a4;padding:30px;font-size:12px}
-@media(min-width:800px){.stats{grid-template-columns:repeat(4,1fr)}header{padding:30px 8%}}
-</style>
-</head>
-<body>
-<header>
-<h1>KDP Manager</h1>
-<p>Publishing dashboard · Version 0.4</p><button id="logout" type="button" style="float:right">Sign out</button>
-</header>
-<nav>
-<button class="active" onclick="show('overview',this)">Overview</button>
-<button onclick="show('books',this)">My Books</button>
-<button onclick="show('analytics',this)">Analytics</button>
-<button onclick="show('reports',this)">Reports</button>
-</nav>
-<main>
-<div class="notice">DEMO MODE — All book titles, sales and earnings are fictional. No Amazon KDP account is connected.</div>
-<div id="overview">
-<h2>Dashboard Overview</h2>
-<div class="stats">
-<div class="card"><small>Total Books</small><strong>3</strong></div>
-<div class="card"><small>Published</small><strong>2</strong></div>
-<div class="card"><small>Units Sold</small><strong>70</strong></div>
-<div class="card"><small>Demo Revenue</small><strong>$238</strong></div>
-</div>
-<section class="card">
-<h2>Welcome to KDP Manager</h2>
-<p>Your publishing workspace is online and ready for the next development stage.</p>
-<p>Explore the demonstration data using the navigation tabs.</p>
-</section>
-</div>
-<div id="books" class="hidden">
-<h2>My Books</h2>
-<div class="card">
-${demoBooks.map(b => `<div class="book"><div><strong>${b.title}</strong><small>${b.category} · ${b.sales} sales · $${b.revenue.toFixed(2)}</small></div><span class="pill ${b.status === "Draft" ? "draft" : ""}">${b.status}</span></div>`).join("")}
-</div>
-</div>
-<div id="analytics" class="hidden">
-<h2>Sales Analytics</h2>
-<div class="card">
-<p>The Quiet Garden — 42 sales</p>
-<div class="bar"><span style="width:100%"></span></div>
-<p>Mindful Daily Planner — 28 sales</p>
-<div class="bar"><span style="width:67%"></span></div>
-<p>Little Explorers Activity Book — 0 sales</p>
-<div class="bar"><span style="width:0%"></span></div>
-</div>
-</div>
-<div id="reports" class="hidden">
-<h2>Publishing Reports</h2>
-<div class="card">
-<p><strong>Demo total sales:</strong> 70</p>
-<p><strong>Demo total revenue:</strong> $238.00</p>
-<p><strong>Published books:</strong> 2</p>
-<p><strong>Draft books:</strong> 1</p>
-<p>CSV exports and real KDP report imports are planned for a later version.</p>
-</div>
-</div>
-</main>
-<footer>KDP Manager 0.3 · Demo Dashboard</footer>
-<script>
-document.getElementById("logout").addEventListener("click",async()=>{await fetch("/api/auth/logout",{method:"POST"});location.assign("/login")});
-function show(id,button){
-document.querySelectorAll("main > div[id]").forEach(el=>el.classList.add("hidden"));
-document.getElementById(id).classList.remove("hidden");
-document.querySelectorAll("nav button").forEach(el=>el.classList.remove("active"));
-button.classList.add("active");
-}
-</script>
-</body>
-</html>`;
-
-const loginPage = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Sign in — KDP Manager</title><style>
-*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f4f6fa;font:16px Arial,sans-serif;color:#17233d;padding:20px}
-main{width:min(100%,400px);background:#fff;padding:30px;border-radius:16px;box-shadow:0 8px 30px #17233d15}
-h1{margin:0 0 8px}p{color:#64748b}label{display:block;margin-top:18px;font-weight:600}input{display:block;width:100%;margin-top:7px;padding:13px;border:1px solid #cbd5e1;border-radius:9px;font-size:16px}
-button{margin-top:24px;width:100%;padding:14px;background:#2563eb;color:white;border:0;border-radius:9px;font-weight:700;font-size:16px;cursor:pointer}
-#error{color:#b91c1c;min-height:22px}button:disabled{opacity:.6}
-</style></head><body><main><h1>KDP Manager</h1><p>Administrator sign in</p>
-<form id="form"><label>Username<input name="username" autocomplete="username" required maxlength="100"></label>
-<label>Password<input name="password" type="password" autocomplete="current-password" required></label>
-<button id="submit" type="submit">Sign in</button><p id="error" role="alert"></p></form></main>
-<script>
-document.getElementById("form").addEventListener("submit",async e=>{
-e.preventDefault();const button=document.getElementById("submit"),error=document.getElementById("error");
-button.disabled=true;error.textContent="";
-try{const data=new FormData(e.target);const response=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:data.get("username"),password:data.get("password")})});
-if(!response.ok){error.textContent=response.status===429?"Too many attempts. Try again later.":"Unable to sign in.";return}
-location.assign("/");
-}catch{error.textContent="Connection error. Try again."}finally{button.disabled=false}
-});
+const dashboard = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KDP Manager</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f4f6fa;color:#17233d;font:16px Arial,sans-serif}header{background:#17233d;color:white;padding:20px}header h1{margin:0 0 8px}header p{margin:0;color:#b9c6db}button{cursor:pointer;border:0;border-radius:9px;padding:10px 16px}#logout{float:right;background:#fff;color:#17233d}main{max-width:1000px;margin:auto;padding:20px}.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.card{background:white;padding:20px;border-radius:12px;margin-bottom:14px;box-shadow:0 3px 14px #15213d0a}.card small{display:block;color:#64748b}.card strong{display:block;font-size:25px;margin-top:10px}.book{padding:14px 0;border-bottom:1px solid #e2e8f0}.book:last-child{border:0}.book small{margin-top:6px}#error{color:#b91c1c}@media(min-width:700px){.stats{grid-template-columns:repeat(3,1fr)}}
+</style></head><body><header><button id="logout" type="button">Sign out</button><h1>KDP Manager</h1><p>Private publishing dashboard</p></header><main><p id="error" role="alert"></p><div class="stats"><div class="card"><small>Total books</small><strong id="total">—</strong></div><div class="card"><small>Published books</small><strong id="published">—</strong></div><div class="card"><small>Units sold</small><strong id="units">—</strong></div></div><section class="card"><h2>Royalties by currency</h2><div id="royalties">Loading…</div></section><section class="card"><h2>My Books</h2><div id="books">Loading…</div></section><p>Data is read from your KDP Manager database. Amazon KDP is not connected; sales must be imported or entered separately.</p></main><script>
+const put=(id,value)=>{document.getElementById(id).textContent=String(value)};
+async function load(){try{const [a,b]=await Promise.all([fetch("/books",{cache:"no-store"}),fetch("/api/summary",{cache:"no-store"})]);if(a.status===401||b.status===401){location.assign("/login");return}if(!a.ok||!b.ok)throw Error("Data unavailable");const books=(await a.json()).books,summary=await b.json();put("total",summary.totalBooks);put("published",summary.publishedBooks);put("units",summary.unitsSold);const royalties=document.getElementById("royalties");royalties.replaceChildren();if(!summary.royaltiesByCurrency.length)royalties.textContent="No sales records yet.";for(const row of summary.royaltiesByCurrency){const p=document.createElement("p");p.textContent=row.currency+": "+row.royalties+" ("+row.units+" units)";royalties.append(p)}const list=document.getElementById("books");list.replaceChildren();if(!books.length)list.textContent="No books added yet.";for(const book of books){const item=document.createElement("div");item.className="book";const title=document.createElement("strong");title.textContent=book.title;const detail=document.createElement("small");detail.textContent=[book.author,book.category,book.status].filter(Boolean).join(" · ");item.append(title,detail);list.append(item)}}catch{put("error","Unable to load your data. Please try again later.")}}
+document.getElementById("logout").addEventListener("click",async()=>{await fetch("/api/auth/logout",{method:"POST"});location.assign("/login")});load();
 </script></body></html>`;
 
 export const server = http.createServer(async (req, res) => {
