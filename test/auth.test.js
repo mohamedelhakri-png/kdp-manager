@@ -66,3 +66,32 @@ test("valid credentials create a session and logout revokes it", async () => {
   assert.equal(logout.status, 200);
   assert.equal(isAuthenticated({ headers: { cookie } }), false);
 });
+
+test("five invalid login attempts trigger rate limiting", async () => {
+  const handler = createAuthHandler(() => ({
+    execute: async () => [[]]
+  }));
+  const statuses = [];
+  for (let i = 0; i < 6; i++) {
+    const req = Readable.from([JSON.stringify({ username: "nobody", password: "wrong-password" })]);
+    req.method = "POST";
+    req.headers = { host: "example.com", "content-type": "application/json" };
+    req.socket = { remoteAddress: "rate-limit-test-client" };
+    const res = { writeHead(status) { statuses.push(status); }, end() {} };
+    await handler(req, res, "/api/auth/login");
+  }
+  assert.deepEqual(statuses, [401, 401, 401, 401, 401, 429]);
+});
+test("oversized login payloads count toward rate limiting", async () => {
+  const handler = createAuthHandler(() => { throw Error("Database must not be reached"); });
+  const statuses = [];
+  for (let i = 0; i < 6; i++) {
+    const req = Readable.from(["x".repeat(4097)]);
+    req.method = "POST";
+    req.headers = { host: "example.com", "content-type": "application/json" };
+    req.socket = { remoteAddress: "oversize-test-client" };
+    const res = { writeHead(status) { statuses.push(status); }, end() {} };
+    await handler(req, res, "/api/auth/login");
+  }
+  assert.deepEqual(statuses, [413, 413, 413, 413, 413, 429]);
+});
