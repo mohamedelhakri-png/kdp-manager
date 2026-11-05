@@ -14,7 +14,7 @@ function pruneExpired(now = Date.now()) {
   for (const [key, record] of attempts) if (record.until <= now) attempts.delete(key);
 }
 function ensureCapacity(map, limit) {
-  if (map.size < limit) return;
+  if (map.size < limit) return true;
   pruneExpired();
   return map.size < limit;
 }
