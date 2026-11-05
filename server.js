@@ -328,6 +328,32 @@ export const server = http.createServer(async (req, res) => {
     catch (error) { console.error(JSON.stringify({ event: "sales_analytics_failed", code: error.code || "DB_ERROR" })); json(res, 503, { error: "Analytics temporarily unavailable" }); }
     return;
   }
+  if (path === "/api/system-status") {
+    if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
+    let pool;
+    try {
+      pool = createDatabasePool();
+      const [rows] = await pool.query("SHOW TABLES");
+      const tables = new Set(rows.map(row => Object.values(row)[0]));
+      json(res, 200, {
+        database: "connected",
+        requiredTables: {
+          admin_users: tables.has("admin_users"),
+          books: tables.has("books"),
+          sales_records: tables.has("sales_records"),
+          expenses: tables.has("expenses"),
+          drive_book_files: tables.has("drive_book_files")
+        },
+        integrations: { googleDrive: "not_connected", amazonKdpDirect: "not_connected" }
+      });
+    } catch (error) {
+      console.error(JSON.stringify({ event: "system_status_failed", code: error.code || "DB_ERROR" }));
+      json(res, 503, { database: "unavailable", error: "Database status temporarily unavailable" });
+    } finally {
+      if (pool) await pool.end();
+    }
+    return;
+  }
   if (path === "/api/summary") {
     if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
     try { json(res, 200, { ...(await booksRepository.summary()), royaltiesByCurrency: await booksRepository.salesSummary() }); }
