@@ -4,6 +4,7 @@ import { createAuthHandler, isAuthenticated } from "./auth/auth.js";
 const handleAuth = createAuthHandler();
 import { createDatabasePool } from "./database/connection.js";
 import { createBooksRepository } from "./database/books-repository.js";
+import { validateBook, validBookId } from "./database/book-validation.js";
 const booksRepository = createBooksRepository();
 
 async function checkDatabaseOnStartup() {
@@ -50,6 +51,38 @@ export const server = http.createServer(async (req, res) => {
   if (path === "/" && !isAuthenticated(req)) { res.writeHead(302, { Location: "/login", "Cache-Control": "no-store" }); res.end(); return; }
   if (path === "/books" && !isAuthenticated(req)) {
     json(res, 401, { error: "Authentication required" });
+    return;
+  }
+  const bookId = /^\/api\/books\/([^/]+)$/.exec(path)?.[1];
+  if ((path === "/api/books" && req.method === "POST") || (bookId && req.method === "PUT")) {
+    if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
+    const origin = req.headers.origin;
+    if (origin) {
+      let valid = false;
+      try { const url = new URL(origin); valid = url.protocol === "https:" && url.host === req.headers.host; } catch {}
+      if (!valid) { json(res, 403, { error: "Forbidden" }); return; }
+    }
+    if (!(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) { json(res, 415, { error: "JSON required" }); return; }
+    if (bookId && !validBookId(bookId)) { json(res, 400, { error: "Invalid book ID" }); return; }
+    let raw = "";
+    try {
+      for await (const chunk of req) {
+        raw += chunk.toString();
+        if (Buffer.byteLength(raw) > 16384) { json(res, 413, { error: "Request too large" }); return; }
+      }
+      const { book, error } = validateBook(JSON.parse(raw));
+      if (error) { json(res, 400, { error }); return; }
+      if (bookId) {
+        const updated = await booksRepository.update(bookId, book);
+        json(res, updated ? 200 : 404, updated ? { ok: true } : { error: "Book not found" });
+      } else {
+        const created = await booksRepository.create(book);
+        json(res, 201, created);
+      }
+    } catch (error) {
+      if (error instanceof SyntaxError) json(res, 400, { error: "Invalid JSON" });
+      else { console.error(JSON.stringify({ event: "book_write_failed", code: error.code || "DB_ERROR" })); json(res, 503, { error: "Unable to save book" }); }
+    }
     return;
   }
   if (req.method !== "GET") {
