@@ -10,9 +10,12 @@ import { parseSalesCsv } from "./database/sales-csv.js";
 import { inspectKdpReport } from "./database/kdp-report-inspector.js";
 import { createSalesRepository } from "./database/sales-repository.js";
 import { createSalesAnalyticsRepository } from "./database/sales-analytics.js";
+import { createExpensesRepository } from "./database/expenses-repository.js";
+import { validateExpense } from "./database/expenses-validation.js";
 const booksRepository = createBooksRepository();
 const salesRepository = createSalesRepository();
 const salesAnalytics = createSalesAnalyticsRepository();
+const expensesRepository = createExpensesRepository();
 
 async function checkDatabaseOnStartup() {
   let pool;
@@ -241,6 +244,33 @@ export const server = http.createServer(async (req, res) => {
     }
     return;
   }
+  if (path === "/api/expenses" && req.method === "POST") {
+    if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
+    const origin = req.headers.origin;
+    if (origin) {
+      let valid = false;
+      try { const url = new URL(origin); valid = url.protocol === "https:" && url.host === req.headers.host; } catch {}
+      if (!valid) { json(res, 403, { error: "Forbidden" }); return; }
+    }
+    if (!(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) { json(res, 415, { error: "JSON required" }); return; }
+    let raw = "";
+    try {
+      for await (const chunk of req) {
+        raw += chunk.toString();
+        if (Buffer.byteLength(raw) > 12000) { json(res, 413, { error: "Request too large" }); return; }
+      }
+      const result = validateExpense(JSON.parse(raw));
+      if (result.error) { json(res, 400, { error: result.error }); return; }
+      const created = await expensesRepository.create(result.value);
+      json(res, 201, created);
+    } catch (error) {
+      if (error instanceof SyntaxError) json(res, 400, { error: "Invalid JSON" });
+      else if (error.code === "ER_NO_SUCH_TABLE") json(res, 503, { error: "Expenses database migration required" });
+      else if (error.code === "ER_NO_REFERENCED_ROW_2") json(res, 400, { error: "Book not found" });
+      else { console.error(JSON.stringify({ event: "expense_write_failed", code: error.code || "DB_ERROR" })); json(res, 503, { error: "Unable to save expense" }); }
+    }
+    return;
+  }
   if (req.method !== "GET") {
     json(res, 405, { error: "Method not allowed" });
     return;
@@ -258,6 +288,12 @@ export const server = http.createServer(async (req, res) => {
   if (path === "/books") {
     try { json(res, 200, { books: await booksRepository.list(), demo: false }); }
     catch (error) { console.error(JSON.stringify({ event: "books_read_failed", code: error.code || "DB_ERROR" })); json(res, 503, { error: "Books temporarily unavailable" }); }
+    return;
+  }
+  if (path === "/api/expenses") {
+    if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
+    try { json(res, 200, { expenses: await expensesRepository.list(), expensesByCurrency: await expensesRepository.summary() }); }
+    catch (error) { json(res, 503, { error: error.code === "ER_NO_SUCH_TABLE" ? "Expenses database migration required" : "Expenses temporarily unavailable" }); }
     return;
   }
   if (path === "/api/sales") {
