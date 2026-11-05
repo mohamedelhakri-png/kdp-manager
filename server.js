@@ -27,7 +27,9 @@ const PORT = Number(process.env.PORT || 3000);
 
 const json = (res, status, data) => {
   res.writeHead(status, {
-    "Content-Type": "application/json; charset=utf-8"
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff"
   });
   res.end(JSON.stringify(data));
 };
@@ -59,6 +61,13 @@ function editBook(book){document.getElementById("book-id").value=book.id;for(con
 document.getElementById("cancel-edit").addEventListener("click",resetForm);
 document.getElementById("book-form").addEventListener("submit",async e=>{e.preventDefault();const id=document.getElementById("book-id").value;const payload={};for(const key of bookFields)payload[key]=document.getElementById("book-"+key).value;const save=document.getElementById("save-book");save.disabled=true;put("form-message","Saving…");try{const response=await fetch(id?"/api/books/"+encodeURIComponent(id):"/api/books",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(response.status===401){location.assign("/login");return}const data=await response.json();if(!response.ok){put("form-message",data.error||"Unable to save book");return}resetForm();put("form-message",id?"Book updated successfully.":"Book added successfully.");await load()}catch{put("form-message","Connection error. Please retry.")}finally{save.disabled=false}});
 document.getElementById("logout").addEventListener("click",async()=>{await fetch("/api/auth/logout",{method:"POST"});location.assign("/login")});load();
+</script></body></html>`;
+
+const loginPage = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in — KDP Manager</title><style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f4f6fa;color:#17233d;font:16px Arial,sans-serif}main{width:min(92vw,410px);background:white;padding:28px;border-radius:16px;box-shadow:0 6px 28px #17233d16}h1{margin-top:0}label{display:block;margin:16px 0}input{display:block;width:100%;padding:13px;margin-top:7px;border:1px solid #cbd5e1;border-radius:8px;font:inherit}button{width:100%;padding:13px;border:0;border-radius:8px;background:#1d4ed8;color:white;font:inherit;cursor:pointer}button:disabled{opacity:.6}#error{color:#b91c1c;min-height:22px}
+</style></head><body><main><h1>KDP Manager</h1><p>Administrator sign in</p><form id="login-form"><label>Username<input id="username" autocomplete="username" required maxlength="100"></label><label>Password<input id="password" type="password" autocomplete="current-password" required></label><button id="submit" type="submit">Sign in</button><p id="error" role="alert"></p></form></main><script>
+document.getElementById("login-form").addEventListener("submit",async event=>{event.preventDefault();const button=document.getElementById("submit"),error=document.getElementById("error");button.disabled=true;error.textContent="";try{const response=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:document.getElementById("username").value,password:document.getElementById("password").value})});if(!response.ok){error.textContent=response.status===429?"Too many attempts. Try again later.":"Invalid credentials or service unavailable.";return}location.assign("/")}catch{error.textContent="Connection error. Please retry."}finally{button.disabled=false}});
 </script></body></html>`;
 
 export const server = http.createServer(async (req, res) => {
