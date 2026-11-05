@@ -7,6 +7,17 @@ const sessions = new Map();
 const attempts = new Map();
 const MAX_AGE = 8 * 60 * 60 * 1000;
 const WINDOW = 15 * 60 * 1000;
+const MAX_ATTEMPT_KEYS = 10000;
+const MAX_SESSIONS = 10000;
+function pruneExpired(now = Date.now()) {
+  for (const [key, session] of sessions) if (session.expires <= now) sessions.delete(key);
+  for (const [key, record] of attempts) if (record.until <= now) attempts.delete(key);
+}
+function ensureCapacity(map, limit) {
+  if (map.size < limit) return;
+  pruneExpired();
+  if (map.size >= limit) map.delete(map.keys().next().value);
+}
 export async function hashPassword(password) {
   if (typeof password !== "string" || password.length < 12 || Buffer.byteLength(password) > 1024) throw new Error("Password must contain at least 12 characters");
   const salt = randomBytes(16).toString("hex");
@@ -66,6 +77,7 @@ export function createAuthHandler(poolFactory = createDatabasePool) {
     if (!sameOrigin(req)) { send(res, 403, { error: "Forbidden" }); return true; }
     if (!(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) { send(res, 415, { error: "JSON required" }); return true; }
     const ip = req.socket.remoteAddress || "unknown";
+    ensureCapacity(attempts, MAX_ATTEMPT_KEYS);
     const record = attempts.get(ip);
     if (record && record.until > Date.now() && record.count >= 5) { send(res, 429, { error: "Too many attempts" }); return true; }
     if (!record || record.until <= Date.now()) attempts.set(ip, { count: 0, until: Date.now() + WINDOW });
@@ -87,6 +99,7 @@ export function createAuthHandler(poolFactory = createDatabasePool) {
       if (!valid) { current.count++; send(res, 401, { error: "Invalid credentials" }); return true; }
       attempts.delete(ip);
       const token = randomBytes(32).toString("hex");
+      ensureCapacity(sessions, MAX_SESSIONS);
       sessions.set(sessionKey(token), { id: String(rows[0].id), expires: Date.now() + MAX_AGE });
       send(res, 200, { ok: true }, { "Set-Cookie": setCookie(token, MAX_AGE / 1000) });
     } catch (error) {
