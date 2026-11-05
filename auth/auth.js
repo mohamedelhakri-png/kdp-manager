@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import { createDatabasePool } from "../database/connection.js";
 const scrypt = promisify(scryptCallback);
 const sessions = new Map();
+// Sessions are process-local until a persistent session store is introduced.
 const attempts = new Map();
 const MAX_AGE = 8 * 60 * 60 * 1000;
 const WINDOW = 15 * 60 * 1000;
@@ -37,6 +38,15 @@ export function isAuthenticated(req) {
   if (session.expires <= Date.now()) { sessions.delete(key); return false; }
   return true;
 }
+function sameOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try {
+    const parsed = new URL(origin);
+    const host = req.headers.host;
+    return parsed.protocol === "https:" && parsed.host === host;
+  } catch { return false; }
+}
 export function createAuthHandler(poolFactory = createDatabasePool) {
   let sharedPool;
   return async function handleAuth(req, res, path) {
@@ -45,6 +55,7 @@ export function createAuthHandler(poolFactory = createDatabasePool) {
       return true;
     }
     if (path === "/api/auth/logout" && req.method === "POST") {
+      if (!sameOrigin(req)) { send(res, 403, { error: "Forbidden" }); return true; }
       const token = cookie(req);
       if (token) sessions.delete(sessionKey(token));
       send(res, 200, { ok: true }, { "Set-Cookie": setCookie("", 0) });
@@ -52,6 +63,8 @@ export function createAuthHandler(poolFactory = createDatabasePool) {
     }
     if (path !== "/api/auth/login") return false;
     if (req.method !== "POST") { send(res, 405, { error: "Method not allowed" }); return true; }
+    if (!sameOrigin(req)) { send(res, 403, { error: "Forbidden" }); return true; }
+    if (!(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) { send(res, 415, { error: "JSON required" }); return true; }
     const ip = req.socket.remoteAddress || "unknown";
     const record = attempts.get(ip);
     if (record && record.until > Date.now() && record.count >= 5) { send(res, 429, { error: "Too many attempts" }); return true; }
