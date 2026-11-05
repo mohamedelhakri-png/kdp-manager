@@ -1,5 +1,7 @@
 
 import http from "node:http";
+import { createAuthHandler, isAuthenticated } from "./auth/auth.js";
+const handleAuth = createAuthHandler();
 import { createDatabasePool } from "./database/connection.js";
 
 async function checkDatabaseOnStartup() {
@@ -157,13 +159,17 @@ button.classList.add("active");
 </body>
 </html>`;
 
-export const server = http.createServer((req, res) => {
+export const server = http.createServer(async (req, res) => {
+  const path = new URL(req.url, "http://localhost").pathname;
+  if (await handleAuth(req, res, path)) return;
+  if (path === "/books" && !isAuthenticated(req)) {
+    json(res, 401, { error: "Authentication required" });
+    return;
+  }
   if (req.method !== "GET") {
     json(res, 405, { error: "Method not allowed" });
     return;
   }
-
-  const path = new URL(req.url, "http://localhost").pathname;
 
   if (path === "/health") {
     json(res, 200, {
