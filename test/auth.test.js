@@ -59,7 +59,7 @@ test("valid credentials create a session and logout revokes it", async () => {
   await handler(request("/api/auth/login", { username: "admin", password }), good, "/api/auth/login");
   assert.equal(good.status, 200);
   const cookie = good.headers["Set-Cookie"].split(";")[0];
-  assert.match(good.headers["Set-Cookie"], /HttpOnly; Secure; SameSite=Strict/);
+  assert.match(good.headers["Set-Cookie"], /HttpOnly; Secure; SameSite=Lax/);
   assert.equal(isAuthenticated({ headers: { cookie } }), true);
   const logout = response();
   await handler(request("/api/auth/logout", null, cookie), logout, "/api/auth/logout");

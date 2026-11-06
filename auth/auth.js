@@ -40,7 +40,7 @@ function cookie(req) {
   return match?.[1];
 }
 function sessionKey(token) { return createHash("sha256").update(token).digest("hex"); }
-function setCookie(token, maxAge) { return "kdp_session=" + token + "; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=" + maxAge; }
+function setCookie(token, maxAge) { return "kdp_session=" + token + "; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=" + maxAge; }
 export function isAuthenticated(req) {
   const token = cookie(req);
   if (!token) return false;
