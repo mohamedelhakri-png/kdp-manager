@@ -126,7 +126,7 @@ async function loadDrive(){
       if(!queue.length)return;
       if(!window.confirm("Create "+queue.length+" new DRAFT book(s) and link their Google Drive files? Titles will be provisional. Existing links will not be duplicated."))return;
       bulk.disabled=true;selectAll.disabled=true;refresh.disabled=true;
-      let created=0,already=0,failed=0;
+      let created=0,already=0,failed=0;const errors=[];
       for(let i=0;i<queue.length;i++){
         const file=queue[i];
         batchStatus.textContent="Importing "+(i+1)+" of "+queue.length+": "+file.name;
@@ -135,9 +135,9 @@ async function loadDrive(){
           const result=await response.json();
           if(!response.ok)throw Error(result.error||"Import failed");
           if(result.alreadyLinked)already++;else created++;
-        }catch{failed++;}
+        }catch(error){failed++;errors.push(file.name+": "+(error.message||"Import failed"));}
       }
-      batchStatus.textContent="Finished: "+created+" drafts created, "+already+" already linked, "+failed+" failed. Refresh files to review.";
+      batchStatus.textContent="Finished: "+created+" drafts created, "+already+" already linked, "+failed+" failed."+(errors.length?" Errors: "+errors.slice(0,5).join("; "):"")+" Refresh files to review.";
       bulk.disabled=false;selectAll.disabled=false;refresh.disabled=false;
       await load();
     };
