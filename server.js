@@ -1,7 +1,7 @@
 
 import http from "node:http";
-import { handleGoogleDrive } from "./integrations/google-drive.js";
-import { listDriveLinks } from "./database/drive-links-repository.js";
+import { handleGoogleDrive, verifyDriveFile } from "./integrations/google-drive.js";
+import { listDriveLinks, saveDriveLink } from "./database/drive-links-repository.js";
 import { createAuthHandler, isAuthenticated } from "./auth/auth.js";
 const handleAuth = createAuthHandler();
 import { createDatabasePool } from "./database/connection.js";
@@ -360,6 +360,31 @@ export const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (path === "/api/drive/book-links" && req.method === "POST") {
+    if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
+    const origin = req.headers.origin;
+    if (origin !== "https://" + req.headers.host) { json(res, 403, { error: "Forbidden origin" }); return; }
+    if (!(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) { json(res, 415, { error: "JSON required" }); return; }
+    let raw = "";
+    try {
+      for await (const chunk of req) {
+        raw += chunk.toString();
+        if (Buffer.byteLength(raw) > 4096) { json(res, 413, { error: "Request too large" }); return; }
+      }
+      const body = JSON.parse(raw);
+      if (!body || !validBookId(String(body.bookId || "")) || !/^[a-zA-Z0-9_-]{10,255}$/.test(body.fileId || "") || body.confirm !== true) {
+        json(res, 400, { error: "Valid book, file and confirmation required" }); return;
+      }
+      const file = await verifyDriveFile(body.fileId);
+      if (!file) { json(res, 422, { error: "File not found in authorized Drive folder" }); return; }
+      const result = await saveDriveLink(String(body.bookId), file);
+      json(res, result.status || 200, result);
+    } catch (error) {
+      console.error(JSON.stringify({ event: "drive_link_failed", code: error.code || "LINK_ERROR" }));
+      json(res, 503, { error: error.code === "ER_NO_SUCH_TABLE" ? "Drive links migration required" : "Could not save Drive link" });
+    }
+    return;
+  }
   if (path === "/api/drive/book-links" && req.method === "GET") {
     if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
     try { json(res, 200, { links: await listDriveLinks(), readOnly: true }); }
