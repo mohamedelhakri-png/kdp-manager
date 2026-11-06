@@ -419,7 +419,7 @@ export const server = http.createServer(async (req, res) => {
       }
       const file = await verifyDriveFile(body.fileId);
       if (!file) { json(res, 422, { error: "File not found in authorized Drive folder" }); return; }
-      if (!/\\.(docx?|pdf|epub)$/i.test(file.name || "")) { json(res, 422, { error: "Only manuscript documents can be imported" }); return; }
+      if (!/\.(docx?|pdf|epub)$/i.test(file.name || "")) { json(res, 422, { error: "Only manuscript documents can be imported" }); return; }
       const result = await importDriveDraft(file);
       json(res, result.status || 200, result);
     } catch (error) {
