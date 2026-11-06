@@ -107,6 +107,15 @@ async function loadDrive(){
       const matchLabel=document.createElement("small");
       matchLabel.textContent=preview.textContent.startsWith("Could not compare")?"Match status unavailable":matches.length===1?"Exact title match: "+matches[0].title+" (book #"+matches[0].id+")":matches.length>1?"Ambiguous: "+matches.length+" books have this title":"No exact book title match";
       item.appendChild(matchLabel);
+      const picker=document.createElement("select");
+      picker.setAttribute("aria-label","Choose a book for "+(file.name||"Drive file"));
+      const placeholder=document.createElement("option");placeholder.value="";placeholder.textContent="Select book to link (preview)";picker.appendChild(placeholder);
+      for(const book of books){const option=document.createElement("option");option.value=book.id;option.textContent=book.title+" (#"+book.id+")";picker.appendChild(option);}
+      if(matches.length===1)picker.value=matches[0].id;
+      const selection=document.createElement("small");
+      selection.textContent="Choose a book to review the association. No link is saved.";
+      picker.addEventListener("change",()=>{const chosen=books.find(book=>book.id===picker.value);selection.textContent=chosen?"Proposed link: "+file.name+" → "+chosen.title+" (#"+chosen.id+"). Awaiting secure server-side linking.":"No book selected.";});
+      item.appendChild(picker);item.appendChild(selection);
       const meta=document.createElement("small");const date=file.modifiedTime?new Date(file.modifiedTime):null;
       meta.textContent=(date&&!Number.isNaN(date.valueOf())?"Modified: "+date.toLocaleDateString():"Modified date unavailable")+(file.size?" · "+Math.round(Number(file.size)/1024)+" KB":"");item.appendChild(meta);
       if(typeof file.webViewLink==="string"&&file.webViewLink.startsWith("https://")){
