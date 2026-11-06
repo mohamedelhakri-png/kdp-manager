@@ -425,20 +425,6 @@ export const server = http.createServer(async (req, res) => {
     }
     return;
   }
-  if (req.method !== "GET") {
-    json(res, 405, { error: "Method not allowed" });
-    return;
-  }
-
-  if (path === "/health") {
-    json(res, 200, {
-      status: "ok",
-      application: "KDP Manager",
-      version: "0.3.0"
-    });
-    return;
-  }
-
   if (path === "/api/drive/import-draft" && req.method === "POST") {
     if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
     if (req.headers.origin !== "https://" + req.headers.host) { json(res, 403, { error: "Forbidden origin" }); return; }
@@ -489,6 +475,20 @@ export const server = http.createServer(async (req, res) => {
     }
     return;
   }
+  if (req.method !== "GET") {
+    json(res, 405, { error: "Method not allowed" });
+    return;
+  }
+
+  if (path === "/health") {
+    json(res, 200, {
+      status: "ok",
+      application: "KDP Manager",
+      version: "0.3.0"
+    });
+    return;
+  }
+
   if (path === "/api/drive/book-links" && req.method === "GET") {
     if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
     try { json(res, 200, { links: await listDriveLinks(), readOnly: true }); }
