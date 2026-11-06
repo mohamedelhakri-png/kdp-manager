@@ -92,7 +92,7 @@ async function loadDrive(){
       const payload=await booksResponse.json();
       books=Array.isArray(payload.books)?payload.books:[];
     }catch{preview.textContent="Could not compare with MySQL books. Drive files remain accessible."; }
-    const normalized=value=>String(value||"").normalize("NFKC").toLowerCase().replace(/\\.(docx?|pdf|epub)$/i,"").replace(/[^\\p{L}\\p{N}]+/gu," ").trim().replace(/\\s+/g," ");
+    const normalized=value=>String(value||"").normalize("NFKC").toLowerCase().replace(/\.(docx?|pdf|epub)$/i,"").replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");
     if(books.length){
       const byTitle=new Map();
       for(const book of books){const key=normalized(book.title);if(!key)continue;const entries=byTitle.get(key)||[];entries.push(book);byTitle.set(key,entries);}
