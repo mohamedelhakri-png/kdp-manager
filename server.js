@@ -186,7 +186,7 @@ document.getElementById("preview-csv").addEventListener("click",async()=>{
   if(!file||file.size>262144){put("csv-preview","Select a CSV file up to 256 KB.");return}
   const csv=await file.text();
   const lines=csv.trim().split(/\\r?\\n/);
-  if(lines.length<2||lines.length>501||lines[0].replace(/^\uFEFF/,"").trim().toLowerCase()!=="asin,sale_date,units,royalties,currency"){put("csv-preview","Expected header: asin,sale_date,units,royalties,currency; 1–500 rows.");return}
+  if(lines.length<2||lines.length>501||lines[0].replace(/^\\uFEFF/,"").trim().toLowerCase()!=="asin,sale_date,units,royalties,currency"){put("csv-preview","Expected header: asin,sale_date,units,royalties,currency; 1–500 rows.");return}
   pendingCsv=csv;
   put("csv-preview",String(lines.length-1)+" data rows detected. Server will validate ASINs, dates, amounts and duplicates before saving. Confirm only after reviewing the source.");
   confirm.disabled=false;
