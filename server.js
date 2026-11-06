@@ -1,6 +1,7 @@
 
 import http from "node:http";
 import { handleGoogleDrive } from "./integrations/google-drive.js";
+import { listDriveLinks } from "./database/drive-links-repository.js";
 import { createAuthHandler, isAuthenticated } from "./auth/auth.js";
 const handleAuth = createAuthHandler();
 import { createDatabasePool } from "./database/connection.js";
@@ -359,6 +360,15 @@ export const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (path === "/api/drive/book-links" && req.method === "GET") {
+    if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
+    try { json(res, 200, { links: await listDriveLinks(), readOnly: true }); }
+    catch (error) {
+      const missing = error.code === "ER_NO_SUCH_TABLE";
+      json(res, 503, { error: missing ? "Drive links migration required" : "Drive links temporarily unavailable" });
+    }
+    return;
+  }
   if (path === "/books") {
     if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
     try { json(res, 200, { books: await booksRepository.list(), demo: false }); }
