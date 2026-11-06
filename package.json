@@ -10,7 +10,8 @@
     "db:migrate": "node scripts/migrate.js",
     "admin:create": "node scripts/create-admin.js",
     "db:migrate:expenses": "node scripts/migrate-expenses.js",
-    "db:migrate:drive-files": "node scripts/migrate-drive-files.js"
+    "db:migrate:drive-files": "node scripts/migrate-drive-files.js",
+    "db:migrate:drive-grants": "node scripts/migrate-drive-grants.js"
   },
   "dependencies": {
     "mysql2": "^3.15.3"
