@@ -93,8 +93,8 @@ async function loadDrive(){
       books=Array.isArray(payload.books)?payload.books:[];
     }catch{preview.textContent="Could not compare with MySQL books. Drive files remain accessible."; }
     const normalized=value=>String(value||"").normalize("NFKC").toLowerCase().replace(/\.(docx?|pdf|epub)$/i,"").replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");
+    const byTitle=new Map();
     if(books.length){
-      const byTitle=new Map();
       for(const book of books){const key=normalized(book.title);if(!key)continue;const entries=byTitle.get(key)||[];entries.push(book);byTitle.set(key,entries);}
       let matched=0,ambiguous=0;
       for(const file of files){const candidates=byTitle.get(normalized(file.name))||[];if(candidates.length===1)matched++;else if(candidates.length>1)ambiguous++;}
@@ -103,6 +103,10 @@ async function loadDrive(){
     for(const file of files){
       const item=document.createElement("div");item.className="book";
       const name=document.createElement("strong");name.textContent=file.name||"Untitled file";item.appendChild(name);
+      const matches=byTitle.get(normalized(file.name))||[];
+      const matchLabel=document.createElement("small");
+      matchLabel.textContent=matches.length===1?"Exact title match: "+matches[0].title+" (book #"+matches[0].id+")":matches.length>1?"Ambiguous: "+matches.length+" books have this title":"No exact book title match";
+      item.appendChild(matchLabel);
       const meta=document.createElement("small");const date=file.modifiedTime?new Date(file.modifiedTime):null;
       meta.textContent=(date&&!Number.isNaN(date.valueOf())?"Modified: "+date.toLocaleDateString():"Modified date unavailable")+(file.size?" · "+Math.round(Number(file.size)/1024)+" KB":"");item.appendChild(meta);
       if(typeof file.webViewLink==="string"&&file.webViewLink.startsWith("https://")){
