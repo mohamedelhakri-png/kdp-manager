@@ -134,6 +134,23 @@ async function loadDrive(){
         }catch(error){selection.textContent=error.message||"Unable to save link";linkButton.disabled=false;}
       });
       item.appendChild(linkButton);
+      if(/\\.(docx?|pdf|epub)$/i.test(file.name||"")){
+        const importButton=document.createElement("button");
+        importButton.type="button";importButton.textContent="Import as draft & link";
+        importButton.addEventListener("click",async()=>{
+          const provisional=file.name.replace(/\\.(docx?|pdf|epub)$/i,"");
+          if(!window.confirm("Create a NEW draft named '"+provisional+"' and link this Drive file? This is a provisional title to review later."))return;
+          importButton.disabled=true;selection.textContent="Importing draft…";
+          try{
+            const response=await fetch("/api/drive/import-draft",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fileId:file.id,confirm:true})});
+            const result=await response.json();
+            if(!response.ok)throw Error(result.error||"Import failed");
+            selection.textContent=result.alreadyLinked?"Already linked to book #"+result.bookId:"Draft created and linked: "+result.title+" (#"+result.bookId+")";
+            await load();
+          }catch(error){selection.textContent=error.message||"Import failed";importButton.disabled=false;}
+        });
+        item.appendChild(importButton);
+      }
       const meta=document.createElement("small");const date=file.modifiedTime?new Date(file.modifiedTime):null;
       meta.textContent=(date&&!Number.isNaN(date.valueOf())?"Modified: "+date.toLocaleDateString():"Modified date unavailable")+(file.size?" · "+Math.round(Number(file.size)/1024)+" KB":"");item.appendChild(meta);
       if(typeof file.webViewLink==="string"&&file.webViewLink.startsWith("https://")){
