@@ -28,6 +28,15 @@ async function checkDatabaseOnStartup() {
     pool = createDatabasePool();
     const [rows] = await pool.query("SHOW TABLES");
     const names = new Set(rows.map(row => Object.values(row)[0]));
+    if (names.has("books") && !names.has("drive_book_files")) {
+      try {
+        await pool.query("CREATE TABLE IF NOT EXISTS drive_book_files (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, book_id BIGINT UNSIGNED NOT NULL, drive_file_id VARCHAR(255) NOT NULL, file_role ENUM('manuscript','cover','other') NOT NULL DEFAULT 'other', file_name VARCHAR(255) NOT NULL, mime_type VARCHAR(150) NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uq_drive_book_file_role (book_id, drive_file_id, file_role), KEY idx_drive_file_id (drive_file_id), CONSTRAINT fk_drive_book_files_book FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE)");
+        names.add("drive_book_files");
+        console.log(JSON.stringify({ event: "drive_links_table", status: "created" }));
+      } catch (error) {
+        console.error(JSON.stringify({ event: "drive_links_table", status: "migration_failed", code: error.code || "DB_ERROR" }));
+      }
+    }
     const missing = ["admin_users", "books", "sales_records"].filter(name => !names.has(name));
     console.log(JSON.stringify({ level: missing.length ? "WARN" : "LOG", event: "kdp_database_check", connection: "ok", tables: missing.length ? "missing" : "ok", missing }));
   } catch (error) {
