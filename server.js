@@ -117,6 +117,22 @@ async function loadDrive(){
       selection.textContent="Choose a book to review the association. No link is saved.";
       picker.addEventListener("change",()=>{const chosen=books.find(book=>book.id===picker.value);selection.textContent=chosen?"Proposed link: "+file.name+" → "+chosen.title+" (#"+chosen.id+"). Awaiting secure server-side linking.":"No book selected.";});
       item.appendChild(picker);item.appendChild(selection);
+      const linkButton=document.createElement("button");
+      linkButton.type="button";linkButton.textContent="Link selected book";
+      linkButton.disabled=!books.length;
+      linkButton.addEventListener("click",async()=>{
+        if(!picker.value)return void(selection.textContent="Choose a book first.");
+        const chosen=books.find(book=>book.id===picker.value);
+        if(!chosen||!window.confirm("Link "+file.name+" to "+chosen.title+"? This will save an association in MySQL."))return;
+        linkButton.disabled=true;selection.textContent="Saving association…";
+        try{
+          const response=await fetch("/api/drive/book-links",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({bookId:chosen.id,fileId:file.id,confirm:true})});
+          const result=await response.json();
+          if(!response.ok)throw Error(result.error||"Link failed");
+          selection.textContent=result.alreadyLinked?"This file is already linked to the selected book.":"Linked successfully to "+chosen.title;
+        }catch(error){selection.textContent=error.message||"Unable to save link";linkButton.disabled=false;}
+      });
+      item.appendChild(linkButton);
       const meta=document.createElement("small");const date=file.modifiedTime?new Date(file.modifiedTime):null;
       meta.textContent=(date&&!Number.isNaN(date.valueOf())?"Modified: "+date.toLocaleDateString():"Modified date unavailable")+(file.size?" · "+Math.round(Number(file.size)/1024)+" KB":"");item.appendChild(meta);
       if(typeof file.webViewLink==="string"&&file.webViewLink.startsWith("https://")){
