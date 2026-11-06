@@ -1,8 +1,15 @@
 import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
 import { isAuthenticated } from "../auth/auth.js";
+import { persistenceConfigured, loadStoredGrant, saveStoredGrant, deleteStoredGrant } from "./drive-grant-store.js";
 
 const pending = new Map();
 let grant = null;
+let restorePromise = null;
+async function restoreGrant() {
+  if (grant || !persistenceConfigured()) return;
+  if (!restorePromise) restorePromise = loadStoredGrant().then(saved => { if (saved && !grant) grant = saved; }).catch(() => {}).finally(() => { restorePromise = null; });
+  await restorePromise;
+}
 const MAX_PENDING = 30;
 const TTL = 10 * 60 * 1000;
 const SCOPE = "https://www.googleapis.com/auth/drive.readonly";
@@ -33,12 +40,14 @@ async function tokenRequest(params) {
   return result;
 }
 async function accessToken(cfg) {
+  await restoreGrant();
   if (!grant) return null;
   if (grant.expires > Date.now() + 60000) return grant.access;
   if (!grant.refresh) { grant = null; return null; }
   try {
     const next = await tokenRequest({ client_id: cfg.id, client_secret: cfg.secret, refresh_token: grant.refresh, grant_type: "refresh_token" });
     grant = { access: next.access_token, refresh: next.refresh_token || grant.refresh, expires: Date.now() + next.expires_in * 1000 };
+    try { await saveStoredGrant(grant); } catch { /* Keep valid in-memory grant. */ }
     return grant.access;
   } catch { grant = null; return null; }
 }
@@ -49,7 +58,8 @@ export async function handleGoogleDrive(req, res, path) {
   if (!cfg) { respond(res, 503, { error: "Google Drive configuration incomplete" }); return true; }
   const url = new URL(req.url, "http://localhost");
   if (path === "/api/drive/status" && req.method === "GET") {
-    respond(res, 200, { configured: true, connected: !!grant, persistence: "process-memory", folderId: FOLDER }); return true;
+    await restoreGrant();
+    respond(res, 200, { configured: true, connected: !!grant, persistence: persistenceConfigured() ? "encrypted-mysql-if-migrated" : "process-memory", folderId: FOLDER }); return true;
   }
   if (path === "/auth/google/start" && req.method === "GET") {
     cleanPending();
@@ -83,6 +93,10 @@ export async function handleGoogleDrive(req, res, path) {
         code, code_verifier: attempt.verifier, grant_type: "authorization_code"
       });
       grant = { access: result.access_token, refresh: result.refresh_token || null, expires: Date.now() + result.expires_in * 1000 };
+      if (persistenceConfigured()) {
+        try { await saveStoredGrant(grant); }
+        catch { respond(res, 503, { error: "Google authorization succeeded but encrypted persistence failed; check database migration" }); return true; }
+      }
       redirect(res, "/?drive=connected");
     } catch { respond(res, 502, { error: "Google authorization could not be completed" }); }
     return true;
@@ -90,6 +104,8 @@ export async function handleGoogleDrive(req, res, path) {
   if (path === "/api/drive/disconnect" && req.method === "POST") {
     const origin = req.headers.origin;
     if (origin && origin !== "https://" + req.headers.host) { respond(res, 403, { error: "Forbidden" }); return true; }
+    try { await deleteStoredGrant(); }
+    catch { respond(res, 503, { error: "Could not delete stored authorization" }); return true; }
     grant = null; respond(res, 200, { connected: false }); return true;
   }
   if (path === "/api/drive/files" && req.method === "GET") {
