@@ -2,6 +2,7 @@
 import http from "node:http";
 import { handleGoogleDrive, verifyDriveFile } from "./integrations/google-drive.js";
 import { listDriveLinks, saveDriveLink } from "./database/drive-links-repository.js";
+import { importDriveDraft } from "./database/drive-draft-import.js";
 import { createAuthHandler, isAuthenticated } from "./auth/auth.js";
 const handleAuth = createAuthHandler();
 import { createDatabasePool } from "./database/connection.js";
@@ -27,6 +28,15 @@ async function checkDatabaseOnStartup() {
     pool = createDatabasePool();
     const [rows] = await pool.query("SHOW TABLES");
     const names = new Set(rows.map(row => Object.values(row)[0]));
+    if (names.has("books") && !names.has("drive_book_files")) {
+      try {
+        await pool.query("CREATE TABLE IF NOT EXISTS drive_book_files (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, book_id BIGINT UNSIGNED NOT NULL, drive_file_id VARCHAR(255) NOT NULL, file_role ENUM('manuscript','cover','other') NOT NULL DEFAULT 'other', file_name VARCHAR(255) NOT NULL, mime_type VARCHAR(150) NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uq_drive_book_file_role (book_id, drive_file_id, file_role), KEY idx_drive_file_id (drive_file_id), CONSTRAINT fk_drive_book_files_book FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE)");
+        names.add("drive_book_files");
+        console.log(JSON.stringify({ event: "drive_links_table", status: "created" }));
+      } catch (error) {
+        console.error(JSON.stringify({ event: "drive_links_table", status: "migration_failed", code: error.code || "DB_ERROR" }));
+      }
+    }
     const missing = ["admin_users", "books", "sales_records"].filter(name => !names.has(name));
     console.log(JSON.stringify({ level: missing.length ? "WARN" : "LOG", event: "kdp_database_check", connection: "ok", tables: missing.length ? "missing" : "ok", missing }));
   } catch (error) {
@@ -133,6 +143,23 @@ async function loadDrive(){
         }catch(error){selection.textContent=error.message||"Unable to save link";linkButton.disabled=false;}
       });
       item.appendChild(linkButton);
+      if(/\\.(docx?|pdf|epub)$/i.test(file.name||"")){
+        const importButton=document.createElement("button");
+        importButton.type="button";importButton.textContent="Import as draft & link";
+        importButton.addEventListener("click",async()=>{
+          const provisional=file.name.replace(/\\.(docx?|pdf|epub)$/i,"");
+          if(!window.confirm("Create a NEW draft named '"+provisional+"' and link this Drive file? This is a provisional title to review later."))return;
+          importButton.disabled=true;selection.textContent="Importing draft…";
+          try{
+            const response=await fetch("/api/drive/import-draft",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fileId:file.id,confirm:true})});
+            const result=await response.json();
+            if(!response.ok)throw Error(result.error||"Import failed");
+            selection.textContent=result.alreadyLinked?"Already linked to book #"+result.bookId:"Draft created and linked: "+result.title+" (#"+result.bookId+")";
+            await load();
+          }catch(error){selection.textContent=error.message||"Import failed";importButton.disabled=false;}
+        });
+        item.appendChild(importButton);
+      }
       const meta=document.createElement("small");const date=file.modifiedTime?new Date(file.modifiedTime):null;
       meta.textContent=(date&&!Number.isNaN(date.valueOf())?"Modified: "+date.toLocaleDateString():"Modified date unavailable")+(file.size?" · "+Math.round(Number(file.size)/1024)+" KB":"");item.appendChild(meta);
       if(typeof file.webViewLink==="string"&&file.webViewLink.startsWith("https://")){
@@ -376,6 +403,31 @@ export const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (path === "/api/drive/import-draft" && req.method === "POST") {
+    if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
+    if (req.headers.origin !== "https://" + req.headers.host) { json(res, 403, { error: "Forbidden origin" }); return; }
+    if (!(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) { json(res, 415, { error: "JSON required" }); return; }
+    let raw = "";
+    try {
+      for await (const chunk of req) {
+        raw += chunk.toString();
+        if (Buffer.byteLength(raw) > 4096) { json(res, 413, { error: "Request too large" }); return; }
+      }
+      const body = JSON.parse(raw);
+      if (!body || body.confirm !== true || typeof body.fileId !== "string" || !/^[a-zA-Z0-9_-]{10,255}$/.test(body.fileId)) {
+        json(res, 400, { error: "Valid file and explicit confirmation required" }); return;
+      }
+      const file = await verifyDriveFile(body.fileId);
+      if (!file) { json(res, 422, { error: "File not found in authorized Drive folder" }); return; }
+      if (!/\.(docx?|pdf|epub)$/i.test(file.name || "")) { json(res, 422, { error: "Only manuscript documents can be imported" }); return; }
+      const result = await importDriveDraft(file);
+      json(res, result.status || 200, result);
+    } catch (error) {
+      console.error(JSON.stringify({ event: "drive_draft_import_failed", code: error.code || "IMPORT_ERROR" }));
+      json(res, 503, { error: error.code === "ER_NO_SUCH_TABLE" ? "Drive links migration required" : "Draft import failed" });
+    }
+    return;
+  }
   if (path === "/api/drive/book-links" && req.method === "POST") {
     if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
     const origin = req.headers.origin;
