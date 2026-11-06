@@ -2,6 +2,7 @@
 import http from "node:http";
 import { handleGoogleDrive, verifyDriveFile } from "./integrations/google-drive.js";
 import { listDriveLinks, saveDriveLink } from "./database/drive-links-repository.js";
+import { importDriveDraft } from "./database/drive-draft-import.js";
 import { createAuthHandler, isAuthenticated } from "./auth/auth.js";
 const handleAuth = createAuthHandler();
 import { createDatabasePool } from "./database/connection.js";
@@ -376,6 +377,31 @@ export const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (path === "/api/drive/import-draft" && req.method === "POST") {
+    if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
+    if (req.headers.origin !== "https://" + req.headers.host) { json(res, 403, { error: "Forbidden origin" }); return; }
+    if (!(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) { json(res, 415, { error: "JSON required" }); return; }
+    let raw = "";
+    try {
+      for await (const chunk of req) {
+        raw += chunk.toString();
+        if (Buffer.byteLength(raw) > 4096) { json(res, 413, { error: "Request too large" }); return; }
+      }
+      const body = JSON.parse(raw);
+      if (!body || body.confirm !== true || typeof body.fileId !== "string" || !/^[a-zA-Z0-9_-]{10,255}$/.test(body.fileId)) {
+        json(res, 400, { error: "Valid file and explicit confirmation required" }); return;
+      }
+      const file = await verifyDriveFile(body.fileId);
+      if (!file) { json(res, 422, { error: "File not found in authorized Drive folder" }); return; }
+      if (!/\\.(docx?|pdf|epub)$/i.test(file.name || "")) { json(res, 422, { error: "Only manuscript documents can be imported" }); return; }
+      const result = await importDriveDraft(file);
+      json(res, result.status || 200, result);
+    } catch (error) {
+      console.error(JSON.stringify({ event: "drive_draft_import_failed", code: error.code || "IMPORT_ERROR" }));
+      json(res, 503, { error: error.code === "ER_NO_SUCH_TABLE" ? "Drive links migration required" : "Draft import failed" });
+    }
+    return;
+  }
   if (path === "/api/drive/book-links" && req.method === "POST") {
     if (!isAuthenticated(req)) { json(res, 401, { error: "Authentication required" }); return; }
     const origin = req.headers.origin;
