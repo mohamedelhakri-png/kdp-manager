@@ -133,3 +133,17 @@ export async function handleGoogleDrive(req, res, path) {
   }
   respond(res, 405, { error: "Method not allowed" }); return true;
 }
+
+export async function verifyDriveFile(fileId) {
+  if (!/^[a-zA-Z0-9_-]{10,255}$/.test(fileId || '')) return null;
+  const cfg = config();
+  if (!cfg) return null;
+  const token = await accessToken(cfg);
+  if (!token) return null;
+  const endpoint = new URL('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId));
+  endpoint.searchParams.set('fields', 'id,name,mimeType,parents,trashed');
+  const response = await fetch(endpoint, { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(12000) });
+  if (!response.ok) return null;
+  const file = await response.json();
+  return !file.trashed && Array.isArray(file.parents) && file.parents.includes(FOLDER) ? file : null;
+}
